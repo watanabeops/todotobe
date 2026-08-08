@@ -637,6 +637,26 @@ document.addEventListener('click', e => {
     const el = t => e.target.closest(t);
     let n;
 
+    /* ⋯ メニューは行の内側にある。行のクリック（移動・折りたたみ）より先に見る */
+    if ((n = el('[data-pmenu]'))) {
+        e.stopPropagation();
+        const p = projectOf(n.dataset.pmenu);
+        const r = n.getBoundingClientRect();
+        return openMenu(r.left - 120, r.bottom + 4, [
+            { label: '名前を変更', run: () => { go({ kind: 'project', id: p.id }); setTimeout(() => startRenameProject(p), 0); } },
+            { label: 'プロジェクトを削除', danger: true, run: () => killProject(p) },
+        ]);
+    }
+    if ((n = el('[data-smenu]'))) {
+        e.stopPropagation();
+        const s = state.sections.find(x => x.id === n.dataset.smenu);
+        const r = n.getBoundingClientRect();
+        return openMenu(r.left - 120, r.bottom + 4, [
+            { label: '名前を変更', run: () => renameSection(s) },
+            { label: 'セクションを削除', danger: true, run: () => killSection(s) },
+        ]);
+    }
+
     /* --- 追加 --- */
     if ((n = el('[data-addproject]'))) {
         n.innerHTML = '<span class="ico">＋</span><input placeholder="プロジェクト名">';
@@ -700,24 +720,6 @@ document.addEventListener('click', e => {
         const id = n.dataset.fold;
         collapsed.has(id) ? collapsed.delete(id) : collapsed.add(id);
         return render();
-    }
-    if ((n = el('[data-smenu]'))) {
-        const s = state.sections.find(x => x.id === n.dataset.smenu);
-        const r = n.getBoundingClientRect();
-        return openMenu(r.left - 120, r.bottom + 4, [
-            { label: '名前を変更', run: () => renameSection(s) },
-            { label: 'セクションを削除', danger: true, run: () => killSection(s) },
-        ]);
-    }
-
-    /* --- プロジェクト --- */
-    if ((n = el('[data-pmenu]'))) {
-        const p = projectOf(n.dataset.pmenu);
-        const r = n.getBoundingClientRect();
-        return openMenu(r.left - 120, r.bottom + 4, [
-            { label: '名前を変更', run: () => { go({ kind: 'project', id: p.id }); setTimeout(() => startRenameProject(p), 0); } },
-            { label: 'プロジェクトを削除', danger: true, run: () => killProject(p) },
-        ]);
     }
     if ((n = el('[data-renameproject]'))) return startRenameProject(projectOf(n.dataset.renameproject));
 
