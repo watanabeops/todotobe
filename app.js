@@ -270,6 +270,18 @@ function withTags(text) {
 /* ============================================================
  * 小道具
  * ============================================================ */
+/* 日本語入力の変換確定と、入力の確定は、どちらもエンター。
+   変換中のエンターで確定してしまわないよう、composition の状態を見る。
+   Safari は確定のエンターより先に compositionend を出すことがあるので、
+   直後のわずかな時間も変換扱いにする */
+let composing = false;
+let composingEndedAt = 0;
+document.addEventListener('compositionstart', () => { composing = true; });
+document.addEventListener('compositionend', () => { composing = false; composingEndedAt = Date.now(); });
+function isImeEnter(e) {
+    return composing || e.isComposing || e.keyCode === 229 || (Date.now() - composingEndedAt) < 30;
+}
+
 let toastTimer = null;
 function toast(msg, actionLabel, onAction) {
     const el = document.getElementById('toast');
@@ -307,10 +319,14 @@ function inlineInput(row, onCommit) {
     let done = false;
     input.addEventListener('keydown', ev => {
         if (ev.key === 'Enter' && !ev.shiftKey) {
+            if (isImeEnter(ev)) return;          // 変換の確定なので、まだ閉じない
             ev.preventDefault();
             if (input.value.trim()) { done = true; onCommit(input.value.trim()); }
             else { done = true; render(); }
-        } else if (ev.key === 'Escape') { done = true; render(); }
+        } else if (ev.key === 'Escape') {
+            if (isImeEnter(ev)) return;          // 変換の取り消しを奪わない
+            done = true; render();
+        }
     });
     input.addEventListener('blur', () => { if (!done) { done = true; render(); } });
 }
@@ -896,6 +912,7 @@ function scheduleSave(name, obj) {
 /* 編集の確定 */
 document.addEventListener('keydown', e => {
     const d = e.target.dataset || {};
+    if ((e.key === 'Enter' || e.key === 'Escape') && isImeEnter(e)) return;   // 変換中は横取りしない
     if (d.edittask && e.key === 'Enter') {
         e.preventDefault();
         const x = state.tasks.find(y => y.id === d.edittask);
