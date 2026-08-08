@@ -26,12 +26,17 @@ const DEFAULT_FIREBASE_CONFIG = {
 /* 青・橙・紫・緑・赤・青緑・紺・灰。隣り合う色を最も離した順 */
 const PALETTE = ['#3498db', '#f39c12', '#9b59b6', '#2ecc71', '#e74c3c', '#1abc9c', '#34495e', '#7f8c8d'];
 
+/* 先頭5色は「固定枠」に予約する。枠は順番も色も動かない。
+   6色目以降は、枠に入っていないタグへ自動で配る */
+const SLOTS = 5;
+const AUTO_COLORS = PALETTE.slice(SLOTS);
+
 const COLLECTIONS = ['projects', 'sections', 'tasks', 'notes'];
 
 /* ============================================================
  * 状態
  * ============================================================ */
-let state = { projects: [], sections: [], tasks: [], notes: [], tagColors: {} };
+let state = { projects: [], sections: [], tasks: [], notes: [], tagColors: {}, tagSlots: ['', '', '', '', ''] };
 let config = { enabled: false, firebaseConfig: DEFAULT_FIREBASE_CONFIG, key: '' };
 
 let view = { kind: 'project', id: null };
@@ -64,6 +69,7 @@ function loadLocal() {
             const p = JSON.parse(raw);
             COLLECTIONS.forEach(c => { if (Array.isArray(p[c])) state[c] = p[c]; });
             if (p.tagColors && typeof p.tagColors === 'object') state.tagColors = p.tagColors;
+            if (Array.isArray(p.tagSlots)) state.tagSlots = normalizeSlots(p.tagSlots);
         }
     } catch (e) { console.error('保存データを読めませんでした', e); }
     try {
@@ -135,7 +141,10 @@ async function startSync(push) {
         const metaRef = fs.doc(db, 'todotobe', config.key);
         fb.unsubs.push(fs.onSnapshot(metaRef, d => {
             const m = d.data();
-            if (m && m.tagColors) { state.tagColors = Object.assign({}, m.tagColors, state.tagColors); saveLocal(); render(); }
+            if (!m) return;
+            if (m.tagColors) state.tagColors = Object.assign({}, m.tagColors, state.tagColors);
+            if (Array.isArray(m.tagSlots)) state.tagSlots = normalizeSlots(m.tagSlots);
+            saveLocal(); render();
         }, () => {}));
 
         syncState = 'on';
@@ -160,7 +169,7 @@ async function pushAll() {
             await fs.setDoc(fs.doc(db, 'todotobe', config.key, name, obj.id), strip(obj));
         }
     }
-    await fs.setDoc(fs.doc(db, 'todotobe', config.key), { tagColors: state.tagColors, updatedAt: now() }, { merge: true });
+    await fs.setDoc(fs.doc(db, 'todotobe', config.key), { tagColors: state.tagColors, tagSlots: state.tagSlots, updatedAt: now() }, { merge: true });
 }
 
 function strip(obj) {
@@ -191,7 +200,7 @@ function drop(name, id) {
 
 function putMeta() {
     saveLocal();
-    if (fb) fb.fs.setDoc(fb.fs.doc(fb.db, 'todotobe', config.key), { tagColors: state.tagColors, updatedAt: now() }, { merge: true }).catch(() => {});
+    if (fb) fb.fs.setDoc(fb.fs.doc(fb.db, 'todotobe', config.key), { tagColors: state.tagColors, tagSlots: state.tagSlots, updatedAt: now() }, { merge: true }).catch(() => {});
 }
 
 /* ============================================================
@@ -214,16 +223,41 @@ function allTags() {
     return seen;
 }
 
-/* タグごとに色を1回決めて覚える。未割り当てには、いま最も使われていない色を与える */
+/* 枠は必ず SLOTS 個。中身は '#…' か空文字 */
+function normalizeSlots(arr) {
+    const out = [];
+    for (let i = 0; i < SLOTS; i++) out.push(typeof (arr || [])[i] === 'string' ? (arr[i] || '') : '');
+    return out;
+}
+function slotIndexOf(tag) { return state.tagSlots.indexOf(tag); }
+
+/* 枠に入っているタグは、その枠の色。枠の外は残りの色から配る（枠の5色とは重ならない） */
 function tagColor(tag) {
-    if (!state.tagColors[tag]) {
-        const used = {};
-        PALETTE.forEach(c => used[c] = 0);
-        Object.values(state.tagColors).forEach(c => { if (c in used) used[c]++; });
-        state.tagColors[tag] = PALETTE.reduce((best, c) => used[c] < used[best] ? c : best, PALETTE[0]);
-        putMeta();
-    }
+    const i = slotIndexOf(tag);
+    if (i >= 0) return PALETTE[i];
+
+    const cur = state.tagColors[tag];
+    if (cur && AUTO_COLORS.includes(cur)) return cur;
+
+    const used = {};
+    AUTO_COLORS.forEach(c => used[c] = 0);
+    Object.entries(state.tagColors).forEach(([t, c]) => {
+        if (c in used && slotIndexOf(t) < 0) used[c]++;
+    });
+    state.tagColors[tag] = AUTO_COLORS.reduce((best, c) => used[c] < used[best] ? c : best, AUTO_COLORS[0]);
+    putMeta();
     return state.tagColors[tag];
+}
+
+/* 枠にタグ名を割り当てる。'#' は無くても付ける */
+function setSlot(i, raw) {
+    let name = String(raw || '').trim().replace(/\s+/g, '');
+    if (name && !name.startsWith('#')) name = '#' + name;
+    if (name) state.tagSlots = state.tagSlots.map((v, k) => (v === name && k !== i) ? '' : v);  // 二重に置かない
+    state.tagSlots[i] = name;
+    if (name) delete state.tagColors[name];   // 枠の色を使うので、自動割り当ては捨てる
+    putMeta();
+    render();
 }
 
 function esc(s) {
@@ -328,6 +362,12 @@ function go(v) {
     render();
 }
 
+function tagCount(g) {
+    return live().filter(x => extractTags(x.body).includes(g)).length
+        + state.notes.filter(x => extractTags(x.title + ' ' + x.body).includes(g)).length
+        + state.projects.filter(p => extractTags(p.scratch).includes(g)).length;
+}
+
 function sideItem(ico, label, cnt, target, active, extra) {
     return `<div class="side-item ${active ? 'active' : ''}" data-go="${target}">
         <span class="ico">${ico}</span><span class="nm">${esc(label)}</span>
@@ -351,18 +391,31 @@ function renderSidebar() {
     });
     h.push(`<div class="side-item add" data-addproject="1"><span class="ico">＋</span><span class="nm">プロジェクト</span></div>`);
 
-    const tags = allTags();
-    if (tags.length) {
-        h.push('<div class="side-head">タグ</div>');
-        tags.forEach(g => {
-            const n = live().filter(x => extractTags(x.body).includes(g)).length
-                + state.notes.filter(x => extractTags(x.title + ' ' + x.body).includes(g)).length
-                + state.projects.filter(p => extractTags(p.scratch).includes(g)).length;
+    h.push('<div class="side-head">タグ</div>');
+
+    /* 固定枠。中身が空でも、順番と色は動かさずに出しておく */
+    state.tagSlots.forEach((g, i) => {
+        if (!g) {
+            h.push(`<div class="side-item slot-empty" data-setslot="${i}">
+                <span class="tag-dot" style="background:${PALETTE[i]}"></span>
+                <span class="nm">枠${i + 1}</span></div>`);
+            return;
+        }
+        h.push(`<div class="side-item ${view.kind === 'tag' && view.id === g ? 'active' : ''}" data-go="tag:${esc(g)}">
+            <span class="tag-dot" style="background:${PALETTE[i]}"></span>
+            <span class="nm">${esc(g)}</span>
+            ${tagCount(g) ? `<span class="cnt">${tagCount(g)}</span>` : ''}
+            <span class="dots" data-slotmenu="${i}">⋯</span></div>`);
+    });
+
+    /* 枠に入っていないタグ。五十音・アルファベット順 */
+    allTags().filter(g => slotIndexOf(g) < 0)
+        .sort((a, b) => a.localeCompare(b, 'ja'))
+        .forEach(g => {
             h.push(`<div class="side-item ${view.kind === 'tag' && view.id === g ? 'active' : ''}" data-go="tag:${esc(g)}">
                 <span class="tag-dot" style="background:${tagColor(g)}"></span>
-                <span class="nm">${esc(g)}</span><span class="cnt">${n}</span></div>`);
+                <span class="nm">${esc(g)}</span><span class="cnt">${tagCount(g)}</span></div>`);
         });
-    }
 
     /* 設定は下端に固定する。上のリストだけがスクロールする */
     document.getElementById('sidebar').innerHTML =
@@ -667,6 +720,16 @@ document.addEventListener('click', e => {
             { label: 'プロジェクトを削除', danger: true, run: () => killProject(p) },
         ]);
     }
+    if ((n = el('[data-slotmenu]'))) {
+        e.stopPropagation();
+        const i = Number(n.dataset.slotmenu);
+        const r = n.getBoundingClientRect();
+        return openMenu(r.left - 120, r.bottom + 4, [
+            { label: 'タグ名を変える', run: () => editSlot(i) },
+            { label: '枠を空ける', run: () => setSlot(i, '') },
+        ]);
+    }
+    if ((n = el('[data-setslot]'))) return editSlot(Number(n.dataset.setslot));
     if ((n = el('[data-smenu]'))) {
         e.stopPropagation();
         const s = state.sections.find(x => x.id === n.dataset.smenu);
@@ -859,6 +922,16 @@ document.addEventListener('blur', e => {
     }
 }, true);
 
+/* 枠の行をその場で入力欄に変える */
+function editSlot(i) {
+    const row = document.querySelector(`[data-setslot="${i}"], [data-slotmenu="${i}"]`);
+    const item = row && row.closest('.side-item');
+    if (!item) return;
+    item.innerHTML = `<span class="tag-dot" style="background:${PALETTE[i]}"></span>
+        <input value="${esc(state.tagSlots[i])}" placeholder="#タグ名">`;
+    inlineInput(item, v => setSlot(i, v));
+}
+
 /* --- 名前の変更・削除 --- */
 function startRenameProject(p) {
     if (!p) return;
@@ -939,6 +1012,7 @@ function importJSON() {
                 if (!confirm('いまのデータをすべて置き換えます。よろしいですか？')) return;
                 COLLECTIONS.forEach(c => state[c] = p[c]);
                 state.tagColors = p.tagColors || {};
+                state.tagSlots = normalizeSlots(p.tagSlots);
                 saveLocal();
                 if (fb) pushAll();
                 render();

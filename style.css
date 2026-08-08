@@ -74,6 +74,10 @@ body {
 .side-item.add .nm { color: var(--muted); }
 .side-item input { border: 0; outline: 0; font: inherit; flex: 1; min-width: 0; background: transparent; color: var(--text); }
 .tag-dot { width: 9px; height: 9px; border-radius: 50%; flex: 0 0 9px; }
+.side-item.slot-empty .nm { color: #c4bfb9; }
+.side-item.slot-empty .tag-dot { opacity: .35; }
+.side-item.slot-empty:hover .tag-dot { opacity: 1; }
+.side-item.slot-empty:hover .nm { color: var(--muted); }
 .side-foot {
     flex: 0 0 auto;
     padding: 10px 18px calc(12px + env(safe-area-inset-bottom));
