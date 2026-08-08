@@ -33,7 +33,10 @@ body {
     flex: 0 0 260px;
     background: var(--side-bg);
     border-right: 1px solid var(--side-line);
+    /* iOS Safari の 100vh はバーの分だけ画面より大きい。
+       そのままだと下端に固定した「設定」が画面外へ落ちる */
     height: 100vh;
+    height: 100dvh;
     display: flex;
     flex-direction: column;
     overflow: hidden;
@@ -90,7 +93,7 @@ body {
 .sync-state b { font-weight: 600; color: var(--muted); }
 
 /* ---------- 本体の枠 ---------- */
-#main { flex: 1; height: 100vh; min-width: 0; display: flex; flex-direction: column; }
+#main { flex: 1; height: 100vh; height: 100dvh; min-width: 0; display: flex; flex-direction: column; }
 #view { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .scrollwrap { flex: 1; min-height: 0; overflow-y: auto; padding: 28px 40px 120px; }
 .wrap { max-width: 780px; margin: 0 auto; }
