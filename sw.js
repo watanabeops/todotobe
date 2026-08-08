@@ -5,7 +5,7 @@
  */
 
 const CACHE = 'todotobe-v1';
-const SHELL = ['./', 'index.html', 'style.css', 'app.js', 'manifest.json', 'icons/icon.svg'];
+const SHELL = ['./', 'index.html', 'style.css', 'app.js', 'manifest.json', 'icons/favicon-64.png', 'icons/apple-touch-icon.png'];
 
 self.addEventListener('install', e => {
     self.skipWaiting();

@@ -280,6 +280,14 @@ mark { background: #ffe9a8; color: inherit; border-radius: 2px; }
     opacity: 0; pointer-events: none; transition: opacity .18s, transform .18s; z-index: 50;
 }
 #toast.on { opacity: .94; transform: translateX(-50%) translateY(0); }
+#toast.has-act { pointer-events: auto; }
+.toast-act {
+    font: inherit; font-size: 13px; font-weight: 600;
+    margin-left: 10px; padding: 3px 10px;
+    border: 1px solid rgba(255,255,255,.35); border-radius: 6px;
+    background: transparent; color: #ffb3a8; cursor: pointer;
+}
+.toast-act:hover { background: rgba(255,255,255,.12); color: #fff; }
 
 /* ---------- スマホ ---------- */
 #burger {

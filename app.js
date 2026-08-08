@@ -237,12 +237,32 @@ function withTags(text) {
  * 小道具
  * ============================================================ */
 let toastTimer = null;
-function toast(msg) {
+function toast(msg, actionLabel, onAction) {
     const el = document.getElementById('toast');
-    el.textContent = msg;
+    el.innerHTML = esc(msg) + (actionLabel ? ` <button class="toast-act">${esc(actionLabel)}</button>` : '');
+    el.classList.toggle('has-act', !!actionLabel);
     el.classList.add('on');
+    if (actionLabel) {
+        el.querySelector('.toast-act').onclick = () => { el.classList.remove('on'); onAction(); };
+    }
     clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => el.classList.remove('on'), 2200);
+    toastTimer = setTimeout(() => el.classList.remove('on'), actionLabel ? 7000 : 2200);
+}
+
+/* 削除は訊かずに実行し、代わりに戻せるようにする。
+   確認を外すなら、取り返しがつくようにしておかないと釣り合わない */
+let lastUndo = null;
+function softDelete(label, items) {
+    items.forEach(it => drop(it.name, it.obj.id));
+    lastUndo = items;
+    render();
+    toast(label, '元に戻す', () => {
+        if (!lastUndo) return;
+        lastUndo.forEach(it => put(it.name, it.obj));
+        lastUndo = null;
+        render();
+        toast('戻しました');
+    });
 }
 
 function inlineInput(row, onCommit) {
@@ -704,7 +724,7 @@ document.addEventListener('click', e => {
     if ((n = el('[data-opennote]'))) { editing = { kind: 'task-note', id: n.dataset.opennote }; return render(); }
     if ((n = el('[data-killtask]'))) {
         const x = state.tasks.find(y => y.id === n.dataset.killtask);
-        if (x && confirm(`「${x.body}」を削除します。アーカイブにも残りません。`)) { drop('tasks', x.id); render(); }
+        if (x) softDelete(`「${x.body}」を削除しました`, [{ name: 'tasks', obj: x }]);
         return;
     }
 
@@ -745,7 +765,7 @@ document.addEventListener('click', e => {
     }
     if ((n = el('[data-killnote]'))) {
         const nt = state.notes.find(x => x.id === n.dataset.killnote);
-        if (nt && confirm(`「${nt.title}」を削除します。取り消せません。`)) { drop('notes', nt.id); openNote = null; render(); }
+        if (nt) { openNote = null; softDelete(`「${nt.title}」を削除しました`, [{ name: 'notes', obj: nt }]); }
         return;
     }
 
@@ -755,10 +775,7 @@ document.addEventListener('click', e => {
         const target = mode === 'all' ? archived()
             : archived().filter(x => (Date.now() - Date.parse(x.completedAt)) > 30 * 864e5);
         if (!target.length) return toast('削除対象はありません');
-        if (!confirm(`${target.length}件を完全に削除します。取り消せません。\n先に書き出しましたか？`)) return;
-        target.forEach(x => drop('tasks', x.id));
-        render();
-        return;
+        return softDelete(`${target.length}件を削除しました`, target.map(x => ({ name: 'tasks', obj: x })));
     }
 
     /* --- 設定 --- */
@@ -866,23 +883,17 @@ function renameSection(s) {
 }
 function killSection(s) {
     const inside = live().filter(t => t.sectionId === s.id);
-    if (!confirm(`セクション「${s.name}」を削除します。`
-        + (inside.length ? `\n中の未完了タスク ${inside.length}件も削除されます。` : '')
-        + `\n完了済みはアーカイブに残ります。`)) return;
-    inside.forEach(t => drop('tasks', t.id));
-    drop('sections', s.id);
-    render();
+    softDelete(`セクション「${s.name}」を削除しました${inside.length ? `（タスク${inside.length}件）` : ''}`,
+        inside.map(t => ({ name: 'tasks', obj: t })).concat([{ name: 'sections', obj: s }]));
 }
 function killProject(p) {
     const inside = live().filter(t => t.projectId === p.id);
-    if (!confirm(`プロジェクト「${p.name}」を削除します。`
-        + (inside.length ? `\n中の未完了タスク ${inside.length}件も削除されます。` : '')
-        + `\nMEMOの内容も消えます。完了済みはアーカイブに残ります。`)) return;
-    inside.forEach(t => drop('tasks', t.id));
-    sectionsOf(p.id).forEach(s => drop('sections', s.id));
-    drop('projects', p.id);
-    view = { kind: 'project', id: null };
-    render();
+    const secs = sectionsOf(p.id);
+    if (view.kind === 'project' && view.id === p.id) view = { kind: 'project', id: null };
+    softDelete(`プロジェクト「${p.name}」を削除しました${inside.length ? `（タスク${inside.length}件）` : ''}`,
+        inside.map(t => ({ name: 'tasks', obj: t }))
+            .concat(secs.map(s => ({ name: 'sections', obj: s })))
+            .concat([{ name: 'projects', obj: p }]));
 }
 
 /* --- 境目のドラッグ --- */
@@ -986,6 +997,7 @@ async function saveSyncSettings() {
 let seeded = false;
 function ensureFirstProject() {
     if (seeded || state.projects.length) return;
+    if (lastUndo) return;                      // 削除の取り消し待ちに割り込まない
     if (config.enabled && config.key && syncState !== 'on') return;
     seeded = true;
     const p = put('projects', { id: uid(), name: 'はじめてのプロジェクト', scratch: '', order: 1 });
