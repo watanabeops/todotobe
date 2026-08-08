@@ -542,41 +542,54 @@ function renderMemo() {
 /* --- 設定 --- */
 function renderSettings() {
     const cfgText = JSON.stringify(config.firebaseConfig || DEFAULT_FIREBASE_CONFIG, null, 2);
+    const st = config.enabled
+        ? (syncState === 'on' ? ['on', 'つながっています']
+            : syncState === 'connecting' ? ['', '接続中…']
+                : syncState === 'error' ? ['err', 'エラー'] : ['', '停止中'])
+        : ['', 'この端末の中だけ'];
+
     return `<div class="crumb">設定 /</div><h1>設定</h1>
 
-    <div class="group-label">端末をまたいで使う</div>
-    <p style="color:var(--muted);font-size:13px;margin:4px 0 14px">
+    <div class="group-label">書き出しと読み込み</div>
+    <div class="bar">
+        <button class="btn" data-export="1">JSONで書き出し</button>
+        <button class="btn" data-import="1">JSONを読み込む</button>
+    </div>
+    <div class="warn">読み込むと、いまのデータは<b>すべて置き換わります</b>。先に書き出しておいてください。</div>
+
+    <div class="group-label" style="margin-top:40px">端末をまたいで使う</div>
+    <p style="color:var(--muted);font-size:13px;margin:4px 0 0">
         切のままなら、記録はこの端末の中だけに保存され、外へは何も送りません。
         入にすると Firestore が正本になり、Mac と iPhone で同じリストを見られます。</p>
 
-    <div class="switch">
-        <input type="checkbox" id="syncOn" ${config.enabled ? 'checked' : ''}>
-        <label for="syncOn">同期する</label>
+    <div class="switch-row">
+        <label class="toggle">
+            <input type="checkbox" id="syncToggle" ${config.enabled ? 'checked' : ''}>
+            <span class="track"></span>
+        </label>
+        <span class="lbl">同期</span>
+        <span class="st ${st[0]}">${st[1]}${syncError ? '：' + esc(syncError) : ''}</span>
     </div>
 
     <div class="field">
-        <label>Firebase の設定（ウェブアプリの構成情報をJSONのまま貼る）</label>
-        <textarea id="fbConfig" rows="7" placeholder='{"apiKey":"…","projectId":"…","appId":"…"}'>${esc(cfgText)}</textarea>
-    </div>
-    <div class="field">
         <label>同期キー</label>
-        <div class="help">認証の代わりのパスワードです。長く、推測されない文字列にしてください。
+        <div class="help">認証の代わりのパスワードです。1台目は「キーを作る」、2台目からは
+            <b>1台目と同じキー</b>を入れて「接続」。
             <b>このキーを知っている人は、あなたのタスクとメモを読み書きできます。</b>
             失うと、保存したものを取り出せなくなります。</div>
         <input type="text" id="fbKey" value="${esc(config.key)}" placeholder="例：todotobe-9f3c1a7e5b2d4088">
     </div>
     <div class="bar">
-        <button class="btn primary" data-savesync="1">保存して接続</button>
         <button class="btn" data-genkey="1">キーを作る</button>
+        <button class="btn primary" data-savesync="1">接続</button>
     </div>
-    <div class="sync-state" style="padding-left:0">${syncLabel()}${syncError ? '：' + esc(syncError) : ''}</div>
 
-    <div class="group-label" style="margin-top:34px">書き出しと読み込み</div>
-    <div class="bar">
-        <button class="btn" data-export="1">JSONで書き出し</button>
-        <button class="btn" data-import="1">JSONを読み込む</button>
-    </div>
-    <div class="warn">読み込むと、いまのデータは<b>すべて置き換わります</b>。先に書き出しておいてください。</div>`;
+    <details class="adv">
+        <summary>Firebase の設定（ふだん触りません）</summary>
+        <div class="field">
+            <textarea id="fbConfig" rows="7" placeholder='{"apiKey":"…","projectId":"…","appId":"…"}'>${esc(cfgText)}</textarea>
+        </div>
+    </details>`;
 }
 
 function render() {
@@ -784,6 +797,10 @@ document.addEventListener('input', e => {
     }
 });
 
+document.addEventListener('change', e => {
+    if (e.target.id === 'syncToggle') toggleSync(e.target.checked);
+});
+
 /* 打っている間は書き込みを間引く */
 const saveTimers = {};
 function scheduleSave(name, obj) {
@@ -919,26 +936,42 @@ function importJSON() {
 }
 
 /* --- 同期設定 --- */
+/* スイッチはその場で効く。キーが無いまま入にはできない */
+async function toggleSync(on) {
+    if (!on) {
+        config.enabled = false;
+        saveConfig(); stopSync(); render();
+        return toast('同期を切りました');
+    }
+    if (!config.key || config.key.length < 16) {
+        render();                       // スイッチを切に戻す
+        return toast('同期キーを入れて「接続」を押してください');
+    }
+    config.enabled = true;
+    saveConfig();
+    await startSync(false);
+    toast(syncState === 'on' ? 'つながりました' : '接続できませんでした');
+}
+
+/* 「接続」ボタン。キーと構成を保存して入にする */
 async function saveSyncSettings() {
-    const on = document.getElementById('syncOn').checked;
     const key = document.getElementById('fbKey').value.trim();
     const txt = document.getElementById('fbConfig').value.trim();
 
-    let cfg = null;
+    let cfg = DEFAULT_FIREBASE_CONFIG;
     if (txt) {
         try { cfg = JSON.parse(txt); }
         catch (e) { return alert('Firebase の設定がJSONとして読めません。\n' + e.message); }
     }
-    if (on && (!cfg || !key)) return alert('同期するには、Firebase の設定と同期キーの両方が要ります。');
-    if (on && key.length < 16) return alert('同期キーが短すぎます。16文字以上にしてください。');
+    if (!key) return alert('同期キーを入れてください。1台目なら「キーを作る」を押してください。');
+    if (key.length < 16) return alert('同期キーが短すぎます。16文字以上にしてください。');
 
-    const first = on && (!config.enabled || config.key !== key);
-    config = { enabled: on, firebaseConfig: cfg, key };
+    const first = !config.enabled || config.key !== key;
+    config = { enabled: true, firebaseConfig: cfg, key };
     saveConfig();
 
-    if (!on) { stopSync(); render(); return toast('同期を切りました'); }
     await startSync(first);
-    toast(syncState === 'on' ? '同期しました' : '接続できませんでした');
+    toast(syncState === 'on' ? 'つながりました' : '接続できませんでした');
 }
 
 /* ============================================================
