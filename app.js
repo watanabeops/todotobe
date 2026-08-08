@@ -344,11 +344,13 @@ function renderSidebar() {
         });
     }
 
-    h.push(`<div class="side-foot">
-        <a data-go="settings">設定</a>
-        <div class="sync-state">${syncLabel()}</div></div>`);
-
-    document.getElementById('sidebar').innerHTML = h.join('');
+    /* 設定は下端に固定する。上のリストだけがスクロールする */
+    document.getElementById('sidebar').innerHTML =
+        `<div id="sideScroll">${h.join('')}</div>
+         <div class="side-foot">
+            <a data-go="settings">設定</a>
+            <div class="sync-state">${syncLabel()}</div>
+         </div>`;
 }
 
 function syncLabel() {
