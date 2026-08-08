@@ -433,21 +433,25 @@ function renderSidebar() {
                 <span class="nm">${esc(g)}</span><span class="cnt">${tagCount(g)}</span></div>`);
         });
 
-    /* 設定は下端に固定する。上のリストだけがスクロールする */
+    /* 「同期」は下端に固定する。上のリストだけがスクロールする */
+    const s = syncDot();
     document.getElementById('sidebar').innerHTML =
         `<div id="sideScroll">${h.join('')}</div>
          <div class="side-foot">
-            <a data-go="settings">設定</a>
-            <div class="sync-state">${syncLabel()}</div>
+            <div class="side-item ${view.kind === 'settings' ? 'active' : ''}" data-go="settings" title="${esc(s.text)}">
+                <span class="sync-dot ${s.cls}" style="background:${s.color}"></span>
+                <span class="nm">同期</span>
+            </div>
          </div>`;
 }
 
-function syncLabel() {
-    if (!config.enabled) return '同期 <b>切</b>（この端末のみ）';
-    if (syncState === 'on') return '同期 <b>入</b>';
-    if (syncState === 'connecting') return '同期 接続中…';
-    if (syncState === 'error') return '同期 <b>エラー</b>';
-    return '同期 停止中';
+/* 入切は色で見せる。緑＝つながっている、赤＝切れている、橙＝接続中 */
+function syncDot() {
+    if (!config.enabled) return { color: '#e74c3c', cls: '', text: '同期は切（この端末の中だけ）' };
+    if (syncState === 'on') return { color: '#2ecc71', cls: '', text: 'つながっています' };
+    if (syncState === 'connecting') return { color: '#f39c12', cls: 'pulse', text: '接続中…' };
+    if (syncState === 'error') return { color: '#e74c3c', cls: 'pulse', text: 'エラー：' + (syncError || '接続できません') };
+    return { color: '#e74c3c', cls: '', text: '停止中' };
 }
 
 function taskHTML(x, showSection) {
