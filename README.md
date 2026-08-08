@@ -30,15 +30,26 @@
 
 設定で同期を入にすると、Firestore が正本になります。
 
-### 手順
+### Firebase 側（設定済み）
 
-1. [Firebase コンソール](https://console.firebase.google.com/) でプロジェクトを作る
-2. Firestore Database を作る（本番モードで可）
-3. 「ウェブアプリを追加」で構成情報（`{"apiKey": …}`）を取得
-4. TODOTOBE の **設定**画面で、構成情報を貼り、「キーを作る」で同期キーを生成して「保存して接続」
-5. iPhone 側でも同じ画面を開き、**同じ構成情報と同じキー**を入れる
+| | |
+|---|---|
+| プロジェクト | `todotobe-62dcd` |
+| ロケーション | `asia-northeast1`（**変更不可**） |
+| プラン | Spark（無料） |
+| Google アナリティクス | 無効 |
 
-### セキュリティルール
+ウェブ構成は `app.js` の `DEFAULT_FIREBASE_CONFIG` に埋め込んであります。**この値は秘密ではありません**（クライアントに配られる前提の値で、Firebase の設計上そうなっています）。守っているのは下のルールと同期キーです。
+
+### 端末をつなぐ手順
+
+1. 設定画面を開く
+2. 「同期する」にチェック → 「キーを作る」 → 「保存して接続」
+3. iPhone 側でも設定画面を開き、**同じキー**を入れて「保存して接続」
+
+構成情報は入力済みなので、2台目以降はキーを入れるだけです。
+
+### セキュリティルール（公開済み）
 
 ```
 rules_version = '2';
@@ -63,12 +74,14 @@ service cloud.firestore {
 `main` ブランチのルートをそのまま GitHub Pages で配信します。ビルドはありません。
 
 ```bash
-cd /Users/ops/Desktop/Code/todotobe
-git init && git add -A && git commit -m "TODOTOBE"
-gh repo create todotobe --private --source=. --push
+cd /Users/ops/Desktop/Code/todotobe && gh repo create todotobe --public --source=. --push
 ```
 
-そのあと GitHub の Settings → Pages で `main` / `/ (root)` を選びます。
+そのあと GitHub の Settings → Pages で `main` / `/ (root)` を選びます。公開先は
+`https://watanabeops.github.io/todotobe/` です。
+
+**Pages を使うにはリポジトリを公開にする必要があります**（無料プランの制約）。
+公開すると `app.js` の Firebase 構成も読めますが、上に書いたとおりこれは秘密ではありません。
 
 ## iPhone に入れる
 

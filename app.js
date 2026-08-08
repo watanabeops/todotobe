@@ -126,6 +126,7 @@ async function startSync(push) {
                 syncState = 'on';
                 saveLocal();
                 render();
+                if (name === 'projects') ensureFirstProject();
             }, err => {
                 syncState = 'error'; syncError = err.message; render();
             }));
@@ -943,6 +944,18 @@ async function saveSyncSettings() {
 /* ============================================================
  * 起動
  * ============================================================ */
+/* 最初の1つを作る。ただし同期が入なら、向こうの中身が届くまで待つ。
+   待たずに作ると、新しい端末で開くたびに空のプロジェクトが増える */
+let seeded = false;
+function ensureFirstProject() {
+    if (seeded || state.projects.length) return;
+    if (config.enabled && config.key && syncState !== 'on') return;
+    seeded = true;
+    const p = put('projects', { id: uid(), name: 'はじめてのプロジェクト', scratch: '', order: 1 });
+    view = { kind: 'project', id: p.id };
+    render();
+}
+
 function boot() {
     loadLocal();
     try {
@@ -950,13 +963,10 @@ function boot() {
         if (h >= 8 && h <= 75) memoH = h;
     } catch (e) {}
 
-    if (!state.projects.length) {
-        state.projects.push({ id: uid(), name: 'はじめてのプロジェクト', scratch: '', order: 1, updatedAt: now() });
-        saveLocal();
-    }
-    view = { kind: 'project', id: state.projects[0].id };
+    view = { kind: 'project', id: state.projects.length ? state.projects[0].id : null };
     render();
     if (config.enabled) startSync(false);
+    ensureFirstProject();
 
     if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
         navigator.serviceWorker.register('sw.js').catch(() => {});
