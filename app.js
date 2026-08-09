@@ -421,8 +421,10 @@ function inlineInput(row, onCommit) {
         if (ev.key === 'Enter' && !ev.shiftKey) {
             if (isImeEnter(ev)) return;          // 変換の確定なので、まだ閉じない
             ev.preventDefault();
-            if (input.value.trim()) { done = true; onCommit(input.value.trim()); }
-            else { done = true; render(); }
+            const v = input.value.trim();
+            done = true;
+            input.blur();          // 焦点を外してから描く。残すと描き直しが後回しになる
+            if (v) onCommit(v); else render();
         } else if (ev.key === 'Escape') {
             if (isImeEnter(ev)) return;          // 変換の取り消しを奪わない
             done = true; render();
@@ -598,7 +600,7 @@ function renderProject(p) {
 </div>
             <textarea data-scratch="${p.id}" placeholder="思いついたことをここへ。#タグ を書くと左のタグから引けます。">${esc(p.scratch)}</textarea>
         </div>
-        ${(() => { const h = tagBarHTML('scratch'); return h ? `<div class="tagline">${h}</div>` : ''; })()}
+        ${(() => { const h = tagBarHTML(); return h ? `<div class="tagline">${h}</div>` : ''; })()}
     </div><div class="divider" id="divider"></div>`;
 
     let body = `<div class="wrap"><div class="crumb">プロジェクト /</div>
@@ -733,7 +735,7 @@ function renderMemo() {
 </div>
                     <textarea data-notebody="${n.id}">${esc(n.body)}</textarea>
                 </div>
-                ${(() => { const b = tagBarHTML('note'); return b ? `<div class="tagline">${b}</div>` : ''; })()}
+                ${(() => { const b = tagBarHTML(); return b ? `<div class="tagline">${b}</div>` : ''; })()}
                 <div class="stamp">更新 ${localDay(n.updatedAt)}
                     <span class="kill" data-killnote="${n.id}">このメモを削除</span></div></div>`;
         }
@@ -819,21 +821,33 @@ function scheduleSidebar() {
     }, 250);
 }
 
-/* 挿入バー。サイドバーと同じ並び（枠→五十音）で、押すとカーソル位置へ挿す */
-function tagBarHTML(target) {
+/* 挿入バーは1本だけ。サイドバーと同じ並び（枠→五十音）で、
+   いま書いている欄（MEMO・メモ本文・タスク名・説明）へ挿す */
+function tagBarHTML() {
     const tags = state.tagSlots.filter(Boolean)
         .concat(allTags().filter(g => slotIndexOf(g) < 0).sort((a, b) => a.localeCompare(b, 'ja')));
     if (!tags.length) return '';
     return tags.map(g =>
-        `<span class="tag-chip" data-inserttag="${esc(g)}" data-target="${target}" title="押すと本文に入ります">
+        `<span class="tag-chip" data-inserttag="${esc(g)}" title="押すと、いま書いている欄に入ります">
             <span class="chip-dot" style="background:${tagColor(g)}"></span>${esc(g)}</span>`).join('');
+}
+
+/* チップを押してもフォーカスを奪わないようにしてあるので、
+   その瞬間の activeElement が「いま書いている欄」。
+   どこにも入っていないときのために、開いている欄をたどる道も残す */
+function fieldFor() {
+    const a = document.activeElement;
+    if (a && (a.tagName === 'INPUT' || a.tagName === 'TEXTAREA') && a.type !== 'checkbox') return a;
+    return document.querySelector('.add-row input, [data-edittask], [data-editnote]')
+        || document.querySelector('[data-notebody]')
+        || document.querySelector('[data-scratch]');
 }
 
 /* 入力欄には触らずにバーだけ差し替える */
 function refreshTagline() {
     const pane = document.querySelector('.pane-memo');
     if (!pane || view.kind !== 'project') return;
-    const html = tagBarHTML('scratch');
+    const html = tagBarHTML();
     let el = pane.querySelector('.tagline');
     if (!html) { if (el) el.remove(); return; }
     if (!el) {
@@ -1010,9 +1024,7 @@ document.addEventListener('click', e => {
 
     /* --- マーカー --- */
     if ((n = el('[data-inserttag]'))) {
-        const ta = n.dataset.target === 'scratch'
-            ? document.querySelector('[data-scratch]')
-            : document.querySelector('[data-notebody]');
+        const ta = fieldFor();
         if (ta) insertTag(ta, n.dataset.inserttag);
         return;
     }
