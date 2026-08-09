@@ -134,6 +134,7 @@ async function startSync(push) {
                 saveLocal();
                 render();
                 if (name === 'projects') ensureFirstProject();
+                if (name === 'projects' || name === 'notes') migrateGreenMark();
             }, err => {
                 syncState = 'error'; syncError = err.message; render();
             }));
@@ -309,9 +310,24 @@ function esc(s) {
 const MARKS = [
     { d: '==', css: 'hl-y', label: '黄' },
     { d: '++', css: 'hl-p', label: 'ピンク' },
-    { d: '~~', css: 'hl-g', label: '緑' },
+    { d: '::', css: 'hl-g', label: '緑' },
 ];
-const MARK_RE = /(==|\+\+|~~)([\s\S]+?)\1/g;
+const MARK_RE = /(==|\+\+|::)([\s\S]+?)\1/g;
+
+/* 緑は ~~ だったが、貼り先が Markdown だと打ち消し線になるので :: に変えた。
+   古い ~~ は読み込んだときに書き換える */
+const OLD_GREEN = /~~([\s\S]+?)~~/g;
+function migrateGreenMark() {
+    const fix = s => String(s == null ? '' : s).replace(OLD_GREEN, '::$1::');
+    state.projects.forEach(p => {
+        const next = fix(p.scratch);
+        if (next !== p.scratch) { p.scratch = next; put('projects', p); }
+    });
+    state.notes.forEach(n => {
+        const next = fix(n.body);
+        if (next !== n.body) { n.body = next; put('notes', n); }
+    });
+}
 const cssOf = d => (MARKS.find(m => m.d === d) || MARKS[0]).css;
 
 /* 入力欄の裏に敷く。文字数を変えてはいけない（変えると色帯がずれる） */
@@ -1340,6 +1356,7 @@ function boot() {
         if (h >= 8 && h <= 75) memoH = h;
     } catch (e) {}
 
+    migrateGreenMark();
     view = { kind: 'project', id: state.projects.length ? state.projects[0].id : null };
     render();
     if (config.enabled) startSync(false);
