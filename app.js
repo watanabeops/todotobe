@@ -209,7 +209,11 @@ function putMetaField(field) {
     if (!fb) return;
     const patch = { updatedAt: now() };
     patch[field] = state[field];
-    fb.fs.setDoc(fb.fs.doc(fb.db, 'todotobe', config.key), patch, { merge: true }).catch(() => {});
+    const ref = fb.fs.doc(fb.db, 'todotobe', config.key);
+    /* setDoc の merge はマップを深く合成するので、消したキーが向こうから戻ってくる。
+       updateDoc はフィールドごと置き換える。文書がまだ無いときだけ setDoc に落ちる */
+    fb.fs.updateDoc(ref, patch)
+        .catch(() => fb.fs.setDoc(ref, patch, { merge: true }).catch(() => {}));
 }
 const putColors = () => putMetaField('tagColors');
 const putSlots = () => putMetaField('tagSlots');
@@ -247,6 +251,22 @@ function normalizeSlots(arr) {
 }
 function slotIndexOf(tag) { return state.tagSlots.indexOf(tag); }
 
+/* 「#催事」と打つ途中の「#催」にも色が割り当たり、そのたびに書き込みが走っていた。
+   書き込みはまとめ、打ち終わって消えた途中経過は捨てる。
+   捨てるのはこの回に生まれた分だけ（他の端末にしか無いタグを消さないため） */
+const bornThisSession = new Set();
+let colorTimer = null;
+function scheduleColors() {
+    clearTimeout(colorTimer);
+    colorTimer = setTimeout(() => {
+        const alive = new Set(allTags());
+        bornThisSession.forEach(t => {
+            if (!alive.has(t)) { delete state.tagColors[t]; bornThisSession.delete(t); }
+        });
+        putColors();
+    }, 800);
+}
+
 /* 枠に入っているタグは、その枠の色。枠の外は残りの色から配る（枠の4色とは重ならない） */
 function tagColor(tag) {
     const i = slotIndexOf(tag);
@@ -261,7 +281,8 @@ function tagColor(tag) {
         if (c in used && slotIndexOf(t) < 0) used[c]++;
     });
     state.tagColors[tag] = AUTO_COLORS.reduce((best, c) => used[c] < used[best] ? c : best, AUTO_COLORS[0]);
-    putColors();
+    bornThisSession.add(tag);
+    scheduleColors();
     return state.tagColors[tag];
 }
 
@@ -703,7 +724,26 @@ function renderSettings() {
     </details>`;
 }
 
-function render() {
+/* 打っている最中に描き直すと、入力欄そのものが作り直されてカーソルが飛ぶ。
+   同期の反映は打鍵中でも返ってくるので、必ずここで止める */
+function isTyping() {
+    const a = document.activeElement;
+    if (!a || (a.tagName !== 'TEXTAREA' && a.tagName !== 'INPUT')) return false;
+    return a.type !== 'checkbox' && a.type !== 'file';
+}
+let renderPending = false;
+let sidebarTimer = null;
+function scheduleSidebar() {
+    clearTimeout(sidebarTimer);
+    sidebarTimer = setTimeout(() => { if (!renderPending) renderSidebar(); }, 300);
+}
+document.addEventListener('blur', () => {
+    setTimeout(() => { if (renderPending && !isTyping()) render(); }, 0);
+}, true);
+
+function render(force) {
+    if (!force && isTyping()) { renderPending = true; scheduleSidebar(); return; }
+    renderPending = false;
     allTags().forEach(tagColor);
     renderSidebar();
     const el = document.getElementById('view');
@@ -897,12 +937,12 @@ document.addEventListener('input', e => {
         const p = projectOf(d.scratch);
         p.scratch = e.target.value;
         scheduleSave('projects', p);
-        renderSidebar();
+        scheduleSidebar();
     } else if (d.notebody) {
         const nt = state.notes.find(x => x.id === d.notebody);
         nt.body = e.target.value;
         scheduleSave('notes', nt);
-        renderSidebar();
+        scheduleSidebar();
     } else if (d.notetitle) {
         const nt = state.notes.find(x => x.id === d.notetitle);
         nt.title = e.target.value;
@@ -911,7 +951,7 @@ document.addEventListener('input', e => {
         searchQ = e.target.value;
         const box = e.target;
         const pos = box.selectionStart;
-        render();
+        render(true);
         const nb = document.getElementById('searchBox');
         if (nb) { nb.focus(); nb.setSelectionRange(pos, pos); }
     }
