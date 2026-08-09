@@ -23,7 +23,7 @@ body {
     font-family: 'Helvetica Neue', Arial, 'Hiragino Kaku Gothic ProN', 'Hiragino Sans', Meiryo, sans-serif;
     color: var(--text);
     background: #fff;
-    font-size: 15px;
+    font-size: 16px;
     line-height: 1.6;
     display: flex;
     overflow: hidden;
@@ -103,9 +103,9 @@ body {
 #view { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .scrollwrap { flex: 1; min-height: 0; overflow-y: auto; padding: 28px 40px 120px; }
 .wrap { max-width: 780px; margin: 0 auto; }
-h1 { font-size: 27px; margin: 0 0 4px; letter-spacing: -.01em; }
+h1 { font-size: 26px; margin: 0 0 4px; letter-spacing: -.01em; }
 h1 .rename { cursor: text; }
-.crumb { color: var(--muted); font-size: 14px; margin-bottom: 18px; }
+.crumb { color: var(--muted); font-size: 16px; margin-bottom: 18px; }
 
 /* ---------- 上下2ペイン（プロジェクト表示） ---------- */
 .pane-memo {
@@ -162,7 +162,7 @@ h1 .rename { cursor: text; }
     flex: 1; min-height: 0; width: 100%;
     border: 0; outline: 0; resize: none;
     margin: 0;
-    font: inherit; font-size: 15px; line-height: 1.85;
+    font: inherit; font-size: 16px; line-height: 1.85;
     white-space: pre-wrap; word-break: break-word; overflow-wrap: break-word;
     padding: 2px 40px 14px;
 }
@@ -234,7 +234,7 @@ h1 .rename { cursor: text; }
 }
 .task-body { flex: 1; min-width: 0; }
 .task-title { word-break: break-word; cursor: text; }
-.task-note { color: var(--muted); font-size: 14px; margin-top: 1px; white-space: pre-wrap; cursor: text; }
+.task-note { color: var(--muted); font-size: 16px; margin-top: 1px; white-space: pre-wrap; cursor: text; }
 .task-note.empty-note { color: #c8c4c0; }
 .task-meta { font-size: 13px; color: var(--muted); margin-top: 3px; }
 .task .kill { color: #c8c4c0; cursor: pointer; padding: 0 4px; visibility: hidden; }
@@ -309,7 +309,7 @@ details.adv[open] summary { margin-bottom: 8px; }
 .note-card { border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; margin-bottom: 10px; cursor: pointer; }
 .note-card:hover { border-color: #d8d8d8; }
 .note-card .nt { font-weight: 600; }
-.note-card .np { color: var(--muted); font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.note-card .np { color: var(--muted); font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .note-card.open { cursor: default; }
 .note-card input.title-input { width: 100%; border: 0; outline: 0; font: inherit; font-weight: 600; background: transparent; }
 .note-card .editor { margin-top: 8px; }
@@ -317,7 +317,7 @@ details.adv[open] summary { margin-bottom: 8px; }
     width: 100%; min-height: 240px;
     border: 0; outline: 0; resize: none;
     margin: 0;
-    font: inherit; font-size: 15px; line-height: 1.8;
+    font: inherit; font-size: 16px; line-height: 1.8;
     white-space: pre-wrap; word-break: break-word; overflow-wrap: break-word;
     padding: 0;
 }
@@ -377,7 +377,7 @@ mark { background: #ffe9a8; color: inherit; border-radius: 2px; }
     .pane-memo .bar-top { padding: 8px 18px 4px 50px; }
     .pane-memo textarea, .pane-memo .backdrop, .pane-memo .tagline { padding-left: 18px; padding-right: 18px; }
     .pane-tasks { padding: 16px 18px 120px; }
-    h1 { font-size: 23px; }
+    h1 { font-size: 22px; }
     .side-item .dots, .section-head .dots, .task .kill { visibility: visible; }
 }
 
