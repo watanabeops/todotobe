@@ -382,6 +382,8 @@ mark { background: #ffe9a8; color: inherit; border-radius: 2px; }
     }
     body.nav-open #sidebar { transform: none; }
     body.nav-open #scrim { display: block; }
+    /* 開いている間、ボタンは引き出しの上に残る。先頭の「検索」が隠れないよう下げる */
+    body.nav-open #sideScroll { padding-top: 52px; }
     .scrollwrap { padding: 50px 18px 120px; }
     .pane-memo .bar-top { padding: 52px 18px 4px 18px; }   /* ボタンの下から始める */
     .pane-memo textarea, .pane-memo .backdrop, .pane-memo .tagline { padding-left: 18px; padding-right: 18px; }
