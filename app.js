@@ -598,8 +598,7 @@ function renderProject(p) {
 </div>
             <textarea data-scratch="${p.id}" placeholder="思いついたことをここへ。#タグ を書くと左のタグから引けます。">${esc(p.scratch)}</textarea>
         </div>
-        ${tags.length ? `<div class="tagline">${tags.map(g =>
-            `<span class="tag" style="background:${tagColor(g)}" data-tag="${esc(g)}">${esc(g)}</span> `).join('')}</div>` : ''}
+        ${(() => { const h = tagBarHTML('scratch'); return h ? `<div class="tagline">${h}</div>` : ''; })()}
     </div><div class="divider" id="divider"></div>`;
 
     let body = `<div class="wrap"><div class="crumb">プロジェクト /</div>
@@ -734,6 +733,7 @@ function renderMemo() {
 </div>
                     <textarea data-notebody="${n.id}">${esc(n.body)}</textarea>
                 </div>
+                ${(() => { const b = tagBarHTML('note'); return b ? `<div class="tagline">${b}</div>` : ''; })()}
                 <div class="stamp">更新 ${localDay(n.updatedAt)}
                     <span class="kill" data-killnote="${n.id}">このメモを削除</span></div></div>`;
         }
@@ -819,22 +819,45 @@ function scheduleSidebar() {
     }, 250);
 }
 
-/* MEMOペインのタグ帯だけ差し替える。入力欄には触らない */
+/* 挿入バー。サイドバーと同じ並び（枠→五十音）で、押すとカーソル位置へ挿す */
+function tagBarHTML(target) {
+    const tags = state.tagSlots.filter(Boolean)
+        .concat(allTags().filter(g => slotIndexOf(g) < 0).sort((a, b) => a.localeCompare(b, 'ja')));
+    if (!tags.length) return '';
+    return tags.map(g =>
+        `<span class="tag-chip" data-inserttag="${esc(g)}" data-target="${target}" title="押すと本文に入ります">
+            <span class="chip-dot" style="background:${tagColor(g)}"></span>${esc(g)}</span>`).join('');
+}
+
+/* 入力欄には触らずにバーだけ差し替える */
 function refreshTagline() {
     const pane = document.querySelector('.pane-memo');
     if (!pane || view.kind !== 'project') return;
-    const p = currentProject();
-    if (!p) return;
-    const tags = extractTags(p.scratch);
+    const html = tagBarHTML('scratch');
     let el = pane.querySelector('.tagline');
-    if (!tags.length) { if (el) el.remove(); return; }
+    if (!html) { if (el) el.remove(); return; }
     if (!el) {
         el = document.createElement('div');
         el.className = 'tagline';
         pane.appendChild(el);
     }
-    el.innerHTML = tags.map(g =>
-        `<span class="tag" style="background:${tagColor(g)}" data-tag="${esc(g)}">${esc(g)}</span> `).join('');
+    el.innerHTML = html;
+}
+
+/* Guevara と同じ入れ方。前後が空白でなければスペースを補い、
+   カーソルはタグの直後。input を出して、ふつうの入力と同じ扱いにする */
+function insertTag(ta, tag) {
+    const s = ta.selectionStart == null ? ta.value.length : ta.selectionStart;
+    const e = ta.selectionEnd == null ? ta.value.length : ta.selectionEnd;
+    const before = ta.value.slice(0, s), after = ta.value.slice(e);
+    const lead = before.length && !/\s$/.test(before) ? ' ' : '';
+    const trail = after.length && !/^\s/.test(after) ? ' ' : '';
+    const ins = lead + tag + trail;
+    ta.value = before + ins + after;
+    ta.focus();
+    const pos = before.length + ins.length;
+    ta.setSelectionRange(pos, pos);
+    ta.dispatchEvent(new Event('input', { bubbles: true }));
 }
 
 /* blur は伝わらないことがある。focusout は必ず上がってくる */
@@ -986,6 +1009,13 @@ document.addEventListener('click', e => {
     if ((n = el('[data-renameproject]'))) return startRenameProject(projectOf(n.dataset.renameproject));
 
     /* --- マーカー --- */
+    if ((n = el('[data-inserttag]'))) {
+        const ta = n.dataset.target === 'scratch'
+            ? document.querySelector('[data-scratch]')
+            : document.querySelector('[data-notebody]');
+        if (ta) insertTag(ta, n.dataset.inserttag);
+        return;
+    }
     if ((n = el('[data-mark]'))) {
         const ta = n.dataset.mark === 'scratch'
             ? document.querySelector('[data-scratch]')
@@ -1086,7 +1116,7 @@ document.addEventListener('scroll', e => {
 
 /* ボタンを押しても入力欄のフォーカスと選択を失わせない */
 document.addEventListener('mousedown', e => {
-    if (e.target.closest('[data-mark]')) e.preventDefault();
+    if (e.target.closest('[data-mark]') || e.target.closest('[data-inserttag]')) e.preventDefault();
 });
 
 /* 打っている間は書き込みを間引く */
