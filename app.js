@@ -26,9 +26,10 @@ const DEFAULT_FIREBASE_CONFIG = {
 /* 青・橙・紫・緑・赤・青緑・紺・灰。隣り合う色を最も離した順 */
 const PALETTE = ['#3498db', '#f39c12', '#9b59b6', '#2ecc71', '#e74c3c', '#1abc9c', '#34495e', '#7f8c8d'];
 
-/* 先頭5色は「固定枠」に予約する。枠は順番も色も動かない。
-   6色目以降は、枠に入っていないタグへ自動で配る */
-const SLOTS = 5;
+/* 先頭4色は「固定枠」に予約する。枠は順番も色も動かない。
+   5色目以降は、枠に入っていないタグへ自動で配る */
+const DEFAULT_SLOTS = ['#映画', '#ビンセントベガ', '#家族', '#じぶん'];
+const SLOTS = DEFAULT_SLOTS.length;
 const AUTO_COLORS = PALETTE.slice(SLOTS);
 
 const COLLECTIONS = ['projects', 'sections', 'tasks', 'notes'];
@@ -36,7 +37,7 @@ const COLLECTIONS = ['projects', 'sections', 'tasks', 'notes'];
 /* ============================================================
  * 状態
  * ============================================================ */
-let state = { projects: [], sections: [], tasks: [], notes: [], tagColors: {}, tagSlots: ['', '', '', '', ''] };
+let state = { projects: [], sections: [], tasks: [], notes: [], tagColors: {}, tagSlots: DEFAULT_SLOTS.slice() };
 let config = { enabled: false, firebaseConfig: DEFAULT_FIREBASE_CONFIG, key: '' };
 
 let view = { kind: 'project', id: null };
@@ -198,10 +199,18 @@ function drop(name, id) {
         .catch(e => { syncState = 'error'; syncError = e.message; render(); });
 }
 
-function putMeta() {
+/* 色と枠は別々に書く。
+   まとめて書くと、枠がまだ届いていない端末が色を1つ決めただけで
+   空の枠まで書き込み、他の端末の枠の名前を消してしまう（実際に消えた） */
+function putMetaField(field) {
     saveLocal();
-    if (fb) fb.fs.setDoc(fb.fs.doc(fb.db, 'todotobe', config.key), { tagColors: state.tagColors, tagSlots: state.tagSlots, updatedAt: now() }, { merge: true }).catch(() => {});
+    if (!fb) return;
+    const patch = { updatedAt: now() };
+    patch[field] = state[field];
+    fb.fs.setDoc(fb.fs.doc(fb.db, 'todotobe', config.key), patch, { merge: true }).catch(() => {});
 }
+const putColors = () => putMetaField('tagColors');
+const putSlots = () => putMetaField('tagSlots');
 
 /* ============================================================
  * タグ
@@ -223,15 +232,20 @@ function allTags() {
     return seen;
 }
 
-/* 枠は必ず SLOTS 個。中身は '#…' か空文字 */
+/* 枠は必ず SLOTS 個。中身は '#…' か空文字。
+   全部空なら既定値に戻す（初回と、事故で消えたときの復帰） */
 function normalizeSlots(arr) {
     const out = [];
     for (let i = 0; i < SLOTS; i++) out.push(typeof (arr || [])[i] === 'string' ? (arr[i] || '') : '');
+    /* 空いた枠は既定値で埋める。自分で付けた名前は上書きしない */
+    for (let i = 0; i < SLOTS; i++) {
+        if (!out[i] && !out.includes(DEFAULT_SLOTS[i])) out[i] = DEFAULT_SLOTS[i];
+    }
     return out;
 }
 function slotIndexOf(tag) { return state.tagSlots.indexOf(tag); }
 
-/* 枠に入っているタグは、その枠の色。枠の外は残りの色から配る（枠の5色とは重ならない） */
+/* 枠に入っているタグは、その枠の色。枠の外は残りの色から配る（枠の4色とは重ならない） */
 function tagColor(tag) {
     const i = slotIndexOf(tag);
     if (i >= 0) return PALETTE[i];
@@ -245,7 +259,7 @@ function tagColor(tag) {
         if (c in used && slotIndexOf(t) < 0) used[c]++;
     });
     state.tagColors[tag] = AUTO_COLORS.reduce((best, c) => used[c] < used[best] ? c : best, AUTO_COLORS[0]);
-    putMeta();
+    putColors();
     return state.tagColors[tag];
 }
 
@@ -255,8 +269,8 @@ function setSlot(i, raw) {
     if (name && !name.startsWith('#')) name = '#' + name;
     if (name) state.tagSlots = state.tagSlots.map((v, k) => (v === name && k !== i) ? '' : v);  // 二重に置かない
     state.tagSlots[i] = name;
-    if (name) delete state.tagColors[name];   // 枠の色を使うので、自動割り当ては捨てる
-    putMeta();
+    if (name) { delete state.tagColors[name]; putColors(); }   // 枠の色を使うので、自動割り当ては捨てる
+    putSlots();
     render();
 }
 
