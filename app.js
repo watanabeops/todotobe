@@ -143,7 +143,9 @@ async function startSync(push) {
         fb.unsubs.push(fs.onSnapshot(metaRef, d => {
             const m = d.data();
             if (!m) return;
-            if (m.tagColors) state.tagColors = Object.assign({}, m.tagColors, state.tagColors);
+            /* 向こうを優先する。手元を優先すると、2台が同時に同じ新タグへ
+               別々の色を付けたとき、どちらも譲らず色が食い違ったままになる */
+            if (m.tagColors) state.tagColors = Object.assign({}, state.tagColors, m.tagColors);
             if (Array.isArray(m.tagSlots)) state.tagSlots = normalizeSlots(m.tagSlots);
             saveLocal(); render();
         }, () => {}));
