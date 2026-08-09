@@ -358,14 +358,23 @@ mark { background: #ffe9a8; color: inherit; border-radius: 2px; }
 .toast-act:hover { background: rgba(255,255,255,.12); color: #fff; }
 
 /* ---------- スマホ ---------- */
+/* いまどこにいるかを出す。三本線だけだと押せるものに見えなかった */
 #burger {
     display: none; position: fixed; top: 8px; left: 8px; z-index: 30;
-    background: #fff; border: 1px solid var(--line); border-radius: 6px;
-    width: 34px; height: 32px; font-size: 16px; cursor: pointer;
+    align-items: center; gap: 8px;
+    height: 36px; max-width: calc(100vw - 90px); padding: 0 12px;
+    background: #fff; border: 1px solid #ddd8d2; border-radius: 999px;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, .07);
+    font: inherit; font-size: 15px; font-weight: 700; color: var(--text);
+    cursor: pointer;
 }
+#burger .bars { display: inline-flex; flex-direction: column; gap: 3px; flex: 0 0 auto; }
+#burger .bars i { display: block; width: 14px; height: 2px; background: var(--muted); border-radius: 1px; }
+#burger .lbl { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#burger .caret { color: var(--muted); font-size: 11px; font-weight: 400; flex: 0 0 auto; }
 #scrim { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.3); z-index: 19; }
 @media (max-width: 720px) {
-    #burger { display: block; }
+    #burger { display: inline-flex; }
     #sidebar {
         position: fixed; z-index: 20; left: 0; top: 0;
         transform: translateX(-100%); transition: transform .2s;
@@ -374,7 +383,7 @@ mark { background: #ffe9a8; color: inherit; border-radius: 2px; }
     body.nav-open #sidebar { transform: none; }
     body.nav-open #scrim { display: block; }
     .scrollwrap { padding: 50px 18px 120px; }
-    .pane-memo .bar-top { padding: 8px 18px 4px 50px; }
+    .pane-memo .bar-top { padding: 52px 18px 4px 18px; }   /* ボタンの下から始める */
     .pane-memo textarea, .pane-memo .backdrop, .pane-memo .tagline { padding-left: 18px; padding-right: 18px; }
     .pane-tasks { padding: 16px 18px 120px; }
     h1 { font-size: 22px; }

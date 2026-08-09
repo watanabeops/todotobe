@@ -895,9 +895,25 @@ document.addEventListener('focusout', () => {
     setTimeout(() => { if (renderPending && !isTyping()) render(); }, 0);
 });
 
+/* スマホのメニューボタン。押すと何が起きるかではなく、いまどこにいるかを出す */
+function renderBurger() {
+    const el = document.getElementById('burger');
+    if (!el) return;
+    let label = 'メニュー';
+    if (view.kind === 'project') { const p = currentProject(); label = p ? p.name : 'TODOTOBE'; }
+    else if (view.kind === 'memo') label = 'メモ';
+    else if (view.kind === 'archive') label = 'アーカイブ';
+    else if (view.kind === 'search') label = '検索';
+    else if (view.kind === 'settings') label = '設定';
+    else if (view.kind === 'tag') label = view.id;
+    el.innerHTML = `<span class="bars"><i></i><i></i><i></i></span>
+        <span class="lbl">${esc(label)}</span><span class="caret">▼</span>`;
+}
+
 function render(force) {
     if (!force && isTyping()) { renderPending = true; scheduleSidebar(); return; }
     renderPending = false;
+    renderBurger();
     allTags().forEach(tagColor);
     renderSidebar();
     const el = document.getElementById('view');
