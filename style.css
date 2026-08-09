@@ -11,6 +11,7 @@
     --hover: #f5f5f5;
     --sel: #ffefe5;
     --memo-bg: #fffdf8;
+    --mark: #ffe9a8;
 }
 
 * { box-sizing: border-box; }
@@ -125,14 +126,30 @@ h1 .rename { cursor: text; }
     background: #fff; padding: 3px 9px; cursor: pointer; font-family: inherit;
 }
 .mini:hover { background: var(--hover); color: var(--text); }
-.pane-memo textarea {
+/* ---------- マーカー（== で挟んだ範囲に色を敷く） ----------
+   入力欄の裏に同じ文字を敷き、そこにだけ色を塗る。
+   字送りに関わる指定は下敷きと入力欄で必ず揃える。ずれると色帯が文字からずれる */
+.editor { position: relative; display: flex; }
+.editor > textarea { position: relative; z-index: 1; background: transparent; }
+.editor > .backdrop {
+    position: absolute; inset: 0; z-index: 0;
+    color: transparent; pointer-events: none; overflow: hidden;
+}
+.editor > .backdrop .hl { background: var(--mark); border-radius: 3px; }
+.editor > .backdrop .syn { color: rgba(0, 0, 0, .16); }
+.hl { background: var(--mark); border-radius: 3px; }
+
+.pane-memo .editor { flex: 1; min-height: 0; }
+.pane-memo textarea, .pane-memo .backdrop {
     flex: 1; min-height: 0; width: 100%;
     border: 0; outline: 0; resize: none;
-    background: transparent;
-    font: inherit; line-height: 1.85;
+    margin: 0;
+    font: inherit; font-size: 14px; line-height: 1.85;
+    white-space: pre-wrap; word-break: break-word; overflow-wrap: break-word;
     padding: 2px 40px 14px;
 }
-.pane-memo.folded textarea, .pane-memo.folded .tagline { display: none; }
+.pane-memo textarea { overflow-y: auto; }
+.pane-memo.folded .editor, .pane-memo.folded .tagline { display: none; }
 .pane-memo .tagline { padding: 0 40px 8px; flex: 0 0 auto; }
 .divider {
     flex: 0 0 auto;
@@ -262,7 +279,16 @@ details.adv[open] summary { margin-bottom: 8px; }
 .note-card .np { color: var(--muted); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .note-card.open { cursor: default; }
 .note-card input.title-input { width: 100%; border: 0; outline: 0; font: inherit; font-weight: 600; background: transparent; }
-.note-card textarea { width: 100%; min-height: 240px; border: 0; outline: 0; resize: vertical; font: inherit; line-height: 1.8; margin-top: 8px; }
+.note-card .editor { margin-top: 8px; }
+.note-card textarea, .note-card .backdrop {
+    width: 100%; min-height: 240px;
+    border: 0; outline: 0; resize: none;
+    margin: 0;
+    font: inherit; font-size: 14px; line-height: 1.8;
+    white-space: pre-wrap; word-break: break-word; overflow-wrap: break-word;
+    padding: 0;
+}
+.note-tools { display: flex; justify-content: flex-end; margin-top: 6px; }
 .note-card .stamp { font-size: 12px; color: var(--muted); margin-top: 8px; display: flex; align-items: center; gap: 12px; }
 .note-card .stamp .kill { color: var(--accent); cursor: pointer; margin-left: auto; }
 
@@ -321,3 +347,6 @@ mark { background: #ffe9a8; color: inherit; border-radius: 2px; }
     h1 { font-size: 22px; }
     .side-item .dots, .section-head .dots, .task .kill { visibility: visible; }
 }
+
+.mini.marker { color: #8a6d1a; border-color: #e8dcae; background: #fffaeb; }
+.mini.marker:hover { background: var(--mark); color: #6b530f; }

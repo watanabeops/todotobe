@@ -300,6 +300,54 @@ function setSlot(i, raw) {
 function esc(s) {
     return String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 }
+/* ============================================================
+ * マーカー
+ * 保存は今までどおりの文字列。==ここ== が印。
+ * ============================================================ */
+const MARK_RE = /==([\s\S]+?)==/g;
+
+/* 入力欄の裏に敷く。文字数を変えてはいけない（変えると色帯がずれる） */
+function paintMark(text) {
+    return esc(text).replace(MARK_RE,
+        (_, inner) => `<span class="hl"><span class="syn">==</span>${inner}<span class="syn">==</span></span>`);
+}
+/* 読むときは印を消す */
+function renderMark(text) {
+    return esc(text).replace(MARK_RE, (_, inner) => `<span class="hl">${inner}</span>`);
+}
+/* 検索や字数勘定のための素の文字列 */
+const stripMark = text => String(text == null ? '' : text).replace(MARK_RE, '$1');
+
+function syncBackdrop(ta) {
+    const bd = ta.parentElement && ta.parentElement.querySelector('.backdrop');
+    if (!bd) return;
+    bd.innerHTML = paintMark(ta.value) + '\n';
+    bd.scrollTop = ta.scrollTop;
+}
+
+function toggleMark(ta) {
+    const s = ta.selectionStart, e = ta.selectionEnd, v = ta.value;
+    /* 中身の無い == を置かせない。片割れが次の印と組んで、以降が全部ずれる */
+    if (s === e) { ta.focus(); return toast('文字を選んでから押してください'); }
+
+    const sel = v.slice(s, e);
+    let ns, ne;
+    if (/^==[\s\S]+==$/.test(sel)) {                                   // 印ごと選んだ → 外す
+        const inner = sel.slice(2, -2);
+        ta.value = v.slice(0, s) + inner + v.slice(e);
+        ns = s; ne = s + inner.length;
+    } else if (v.slice(s - 2, s) === '==' && v.slice(e, e + 2) === '==') {   // 内側だけ選んだ → 外す
+        ta.value = v.slice(0, s - 2) + sel + v.slice(e + 2);
+        ns = s - 2; ne = ns + sel.length;
+    } else {                                                            // 付ける
+        ta.value = v.slice(0, s) + '==' + sel + '==' + v.slice(e);
+        ns = s + 2; ne = e + 2;
+    }
+    ta.focus();
+    ta.setSelectionRange(ns, ne);
+    ta.dispatchEvent(new Event('input', { bubbles: true }));
+}
+
 function withTags(text) {
     return esc(text).replace(TAG_RE, m => `<span class="tag" style="background:${tagColor(m)}" data-tag="${esc(m)}">${m}</span>`);
 }
@@ -526,10 +574,15 @@ function renderProject(p) {
         <div class="bar-top">
             <span class="ttl">MEMO</span>
             <span class="spacer"></span>
+            <button class="mini marker" data-mark="scratch">マーカー</button>
             <button class="mini" data-cut="${p.id}">メモ切りだし</button>
             <button class="mini" data-foldmemo="1">${memoFolded ? '開く' : 'たたむ'}</button>
         </div>
-        <textarea data-scratch="${p.id}" placeholder="思いついたことをここへ。#タグ を書くと左のタグから引けます。">${esc(p.scratch)}</textarea>
+        <div class="editor">
+            <div class="backdrop">${paintMark(p.scratch)}
+</div>
+            <textarea data-scratch="${p.id}" placeholder="思いついたことをここへ。#タグ を書くと左のタグから引けます。">${esc(p.scratch)}</textarea>
+        </div>
         ${tags.length ? `<div class="tagline">${tags.map(g =>
             `<span class="tag" style="background:${tagColor(g)}" data-tag="${esc(g)}">${esc(g)}</span> `).join('')}</div>` : ''}
     </div><div class="divider" id="divider"></div>`;
@@ -576,13 +629,13 @@ function renderTag(tag) {
         h += '<div class="group-label">MEMO</div>';
         h += ss.map(p => `<div class="note-card" data-go="project:${p.id}">
             <div class="nt">${esc(p.name)}</div>
-            <div class="np">${esc(String(p.scratch).replace(/\n/g, ' '))}</div></div>`).join('');
+            <div class="np">${renderMark(String(p.scratch).replace(/\n/g, ' '))}</div></div>`).join('');
     }
     if (ns.length) {
         h += '<div class="group-label">メモ</div>';
         h += ns.map(n => `<div class="note-card" data-note="${n.id}">
             <div class="nt">${esc(n.title)}</div>
-            <div class="np">${esc(String(n.body).replace(/\n/g, ' '))}</div></div>`).join('');
+            <div class="np">${renderMark(String(n.body).replace(/\n/g, ' '))}</div></div>`).join('');
     }
     return h;
 }
@@ -603,8 +656,8 @@ function renderSearch() {
     if (!q) return h + '<div class="empty">語を入れてください。</div>';
 
     const ts = state.tasks.filter(x => hit(x.body, q) || hit(x.note, q));
-    const ns = state.notes.filter(x => hit(x.title, q) || hit(x.body, q));
-    const ss = state.projects.filter(p => hit(p.scratch, q));
+    const ns = state.notes.filter(x => hit(x.title, q) || hit(stripMark(x.body), q));
+    const ss = state.projects.filter(p => hit(stripMark(p.scratch), q));
     if (!ts.length && !ns.length && !ss.length) return h + '<div class="empty">見つかりませんでした。</div>';
 
     if (ts.length) {
@@ -618,12 +671,12 @@ function renderSearch() {
     if (ss.length) {
         h += `<div class="group-label">MEMO ${ss.length}件</div>`;
         h += ss.map(p => `<div class="note-card" data-go="project:${p.id}">
-            <div class="nt">${esc(p.name)}</div><div class="np">${mark(String(p.scratch).replace(/\n/g, ' '), q)}</div></div>`).join('');
+            <div class="nt">${esc(p.name)}</div><div class="np">${mark(stripMark(p.scratch).replace(/\n/g, ' '), q)}</div></div>`).join('');
     }
     if (ns.length) {
         h += `<div class="group-label">メモ ${ns.length}件</div>`;
         h += ns.map(n => `<div class="note-card" data-note="${n.id}">
-            <div class="nt">${mark(n.title, q)}</div><div class="np">${mark(String(n.body).replace(/\n/g, ' '), q)}</div></div>`).join('');
+            <div class="nt">${mark(n.title, q)}</div><div class="np">${mark(stripMark(n.body).replace(/\n/g, ' '), q)}</div></div>`).join('');
     }
     return h;
 }
@@ -660,13 +713,18 @@ function renderMemo() {
         if (openNote === n.id) {
             return `<div class="note-card open">
                 <input class="title-input" data-notetitle="${n.id}" value="${esc(n.title)}">
-                <textarea data-notebody="${n.id}">${esc(n.body)}</textarea>
+                <div class="note-tools"><button class="mini marker" data-mark="note">マーカー</button></div>
+                <div class="editor">
+                    <div class="backdrop">${paintMark(n.body)}
+</div>
+                    <textarea data-notebody="${n.id}">${esc(n.body)}</textarea>
+                </div>
                 <div class="stamp">更新 ${localDay(n.updatedAt)}
                     <span class="kill" data-killnote="${n.id}">このメモを削除</span></div></div>`;
         }
         return `<div class="note-card" data-note="${n.id}">
             <div class="nt">${esc(n.title)}</div>
-            <div class="np">${esc(String(n.body).replace(/\n/g, ' '))}</div></div>`;
+            <div class="np">${renderMark(String(n.body).replace(/\n/g, ' '))}</div></div>`;
     }).join('');
     return h;
 }
@@ -882,6 +940,15 @@ document.addEventListener('click', e => {
     }
     if ((n = el('[data-renameproject]'))) return startRenameProject(projectOf(n.dataset.renameproject));
 
+    /* --- マーカー --- */
+    if ((n = el('[data-mark]'))) {
+        const ta = n.dataset.mark === 'scratch'
+            ? document.querySelector('[data-scratch]')
+            : document.querySelector('[data-notebody]');
+        if (ta) toggleMark(ta);
+        return;
+    }
+
     /* --- MEMOペイン --- */
     if (el('[data-foldmemo]')) { memoFolded = !memoFolded; return render(); }
     if ((n = el('[data-cut]'))) {
@@ -936,11 +1003,13 @@ document.addEventListener('input', e => {
     if (d.scratch) {
         const p = projectOf(d.scratch);
         p.scratch = e.target.value;
+        syncBackdrop(e.target);
         scheduleSave('projects', p);
         scheduleSidebar();
     } else if (d.notebody) {
         const nt = state.notes.find(x => x.id === d.notebody);
         nt.body = e.target.value;
+        syncBackdrop(e.target);
         scheduleSave('notes', nt);
         scheduleSidebar();
     } else if (d.notetitle) {
@@ -961,6 +1030,20 @@ document.addEventListener('change', e => {
     if (e.target.id === 'syncToggle') toggleSync(e.target.checked);
 });
 
+/* 下敷きを入力欄と一緒にスクロールさせる */
+document.addEventListener('scroll', e => {
+    const d = e.target.dataset || {};
+    if (d.scratch || d.notebody) {
+        const bd = e.target.parentElement.querySelector('.backdrop');
+        if (bd) bd.scrollTop = e.target.scrollTop;
+    }
+}, true);
+
+/* ボタンを押しても入力欄のフォーカスと選択を失わせない */
+document.addEventListener('mousedown', e => {
+    if (e.target.closest('[data-mark]')) e.preventDefault();
+});
+
 /* 打っている間は書き込みを間引く */
 const saveTimers = {};
 function scheduleSave(name, obj) {
@@ -972,6 +1055,13 @@ function scheduleSave(name, obj) {
 /* 編集の確定 */
 document.addEventListener('keydown', e => {
     const d = e.target.dataset || {};
+
+    /* ⌘B / Ctrl+B でマーカー */
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'b' && (d.scratch || d.notebody)) {
+        e.preventDefault();
+        return toggleMark(e.target);
+    }
+
     if ((e.key === 'Enter' || e.key === 'Escape') && isImeEnter(e)) return;   // 変換中は横取りしない
     if (d.edittask && e.key === 'Enter') {
         e.preventDefault();
