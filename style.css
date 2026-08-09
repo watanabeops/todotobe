@@ -11,6 +11,9 @@
     --hover: #f5f5f5;
     --sel: #ffefe5;
     --memo-bg: #fffdf8;
+    --mark-y: #ffe9a8;
+    --mark-p: #ffd6e2;
+    --mark-g: #cdf0d5;
     --mark: #ffe9a8;
 }
 
@@ -135,9 +138,22 @@ h1 .rename { cursor: text; }
     position: absolute; inset: 0; z-index: 0;
     color: transparent; pointer-events: none; overflow: hidden;
 }
-.editor > .backdrop .hl { background: var(--mark); border-radius: 3px; }
+.hl { border-radius: 3px; }
+.hl-y { background: var(--mark-y); }
+.hl-p { background: var(--mark-p); }
+.hl-g { background: var(--mark-g); }
 .editor > .backdrop .syn { color: rgba(0, 0, 0, .16); }
-.hl { background: var(--mark); border-radius: 3px; }
+
+/* 色そのものをボタンにする */
+.swatch {
+    width: 22px; height: 18px; padding: 0;
+    border: 1px solid rgba(0, 0, 0, .12); border-radius: 4px;
+    cursor: pointer; font: inherit;
+}
+.swatch:hover { border-color: rgba(0, 0, 0, .35); }
+.swatch.hl-y { background: var(--mark-y); }
+.swatch.hl-p { background: var(--mark-p); }
+.swatch.hl-g { background: var(--mark-g); }
 
 .pane-memo .editor { flex: 1; min-height: 0; }
 .pane-memo textarea, .pane-memo .backdrop {
@@ -288,7 +304,7 @@ details.adv[open] summary { margin-bottom: 8px; }
     white-space: pre-wrap; word-break: break-word; overflow-wrap: break-word;
     padding: 0;
 }
-.note-tools { display: flex; justify-content: flex-end; margin-top: 6px; }
+.note-tools { display: flex; justify-content: flex-end; gap: 6px; margin-top: 6px; }
 .note-card .stamp { font-size: 12px; color: var(--muted); margin-top: 8px; display: flex; align-items: center; gap: 12px; }
 .note-card .stamp .kill { color: var(--accent); cursor: pointer; margin-left: auto; }
 
@@ -348,5 +364,3 @@ mark { background: #ffe9a8; color: inherit; border-radius: 2px; }
     .side-item .dots, .section-head .dots, .task .kill { visibility: visible; }
 }
 
-.mini.marker { color: #8a6d1a; border-color: #e8dcae; background: #fffaeb; }
-.mini.marker:hover { background: var(--mark); color: #6b530f; }

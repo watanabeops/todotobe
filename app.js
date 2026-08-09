@@ -304,19 +304,27 @@ function esc(s) {
  * マーカー
  * 保存は今までどおりの文字列。==ここ== が印。
  * ============================================================ */
-const MARK_RE = /==([\s\S]+?)==/g;
+/* 印は前後で同じ記号。== は最初からある黄色なので変えない。
+   -- は「2026--08」のような普通の文字列と当たるので使わない */
+const MARKS = [
+    { d: '==', css: 'hl-y', label: '黄' },
+    { d: '++', css: 'hl-p', label: 'ピンク' },
+    { d: '~~', css: 'hl-g', label: '緑' },
+];
+const MARK_RE = /(==|\+\+|~~)([\s\S]+?)\1/g;
+const cssOf = d => (MARKS.find(m => m.d === d) || MARKS[0]).css;
 
 /* 入力欄の裏に敷く。文字数を変えてはいけない（変えると色帯がずれる） */
 function paintMark(text) {
-    return esc(text).replace(MARK_RE,
-        (_, inner) => `<span class="hl"><span class="syn">==</span>${inner}<span class="syn">==</span></span>`);
+    return esc(text).replace(MARK_RE, (_, d, inner) =>
+        `<span class="hl ${cssOf(d)}"><span class="syn">${d}</span>${inner}<span class="syn">${d}</span></span>`);
 }
 /* 読むときは印を消す */
 function renderMark(text) {
-    return esc(text).replace(MARK_RE, (_, inner) => `<span class="hl">${inner}</span>`);
+    return esc(text).replace(MARK_RE, (_, d, inner) => `<span class="hl ${cssOf(d)}">${inner}</span>`);
 }
 /* 検索や字数勘定のための素の文字列 */
-const stripMark = text => String(text == null ? '' : text).replace(MARK_RE, '$1');
+const stripMark = text => String(text == null ? '' : text).replace(MARK_RE, '$2');
 
 function syncBackdrop(ta) {
     const bd = ta.parentElement && ta.parentElement.querySelector('.backdrop');
@@ -325,23 +333,30 @@ function syncBackdrop(ta) {
     bd.scrollTop = ta.scrollTop;
 }
 
-function toggleMark(ta) {
+function toggleMark(ta, d) {
     const s = ta.selectionStart, e = ta.selectionEnd, v = ta.value;
-    /* 中身の無い == を置かせない。片割れが次の印と組んで、以降が全部ずれる */
+    /* 中身の無い印を置かせない。片割れが次の印と組んで、以降が全部ずれる */
     if (s === e) { ta.focus(); return toast('文字を選んでから押してください'); }
 
     const sel = v.slice(s, e);
+    const wrapped = MARKS.find(m => sel.length > m.d.length * 2
+        && sel.startsWith(m.d) && sel.endsWith(m.d));
+    const around = MARKS.find(m => v.slice(s - m.d.length, s) === m.d && v.slice(e, e + m.d.length) === m.d);
+
     let ns, ne;
-    if (/^==[\s\S]+==$/.test(sel)) {                                   // 印ごと選んだ → 外す
-        const inner = sel.slice(2, -2);
-        ta.value = v.slice(0, s) + inner + v.slice(e);
-        ns = s; ne = s + inner.length;
-    } else if (v.slice(s - 2, s) === '==' && v.slice(e, e + 2) === '==') {   // 内側だけ選んだ → 外す
-        ta.value = v.slice(0, s - 2) + sel + v.slice(e + 2);
-        ns = s - 2; ne = ns + sel.length;
-    } else {                                                            // 付ける
-        ta.value = v.slice(0, s) + '==' + sel + '==' + v.slice(e);
-        ns = s + 2; ne = e + 2;
+    if (wrapped) {                                   // 印ごと選んだ
+        const inner = sel.slice(wrapped.d.length, -wrapped.d.length);
+        const body = (wrapped.d === d) ? inner : d + inner + d;   // 同じ色なら外す、違えば塗り替え
+        ta.value = v.slice(0, s) + body + v.slice(e);
+        ns = s; ne = s + body.length;
+    } else if (around) {                             // 内側だけ選んだ
+        const L = around.d.length;
+        const body = (around.d === d) ? sel : d + sel + d;
+        ta.value = v.slice(0, s - L) + body + v.slice(e + L);
+        ns = s - L; ne = ns + body.length;
+    } else {                                         // 付ける
+        ta.value = v.slice(0, s) + d + sel + d + v.slice(e);
+        ns = s + d.length; ne = e + d.length;
     }
     ta.focus();
     ta.setSelectionRange(ns, ne);
@@ -574,7 +589,7 @@ function renderProject(p) {
         <div class="bar-top">
             <span class="ttl">MEMO</span>
             <span class="spacer"></span>
-            <button class="mini marker" data-mark="scratch">マーカー</button>
+            ${MARKS.map(m => `<button class="swatch ${m.css}" data-mark="scratch" data-d="${m.d}" title="マーカー（${m.label}）"></button>`).join('')}
             <button class="mini" data-cut="${p.id}">メモ切りだし</button>
             <button class="mini" data-foldmemo="1">${memoFolded ? '開く' : 'たたむ'}</button>
         </div>
@@ -713,7 +728,7 @@ function renderMemo() {
         if (openNote === n.id) {
             return `<div class="note-card open">
                 <input class="title-input" data-notetitle="${n.id}" value="${esc(n.title)}">
-                <div class="note-tools"><button class="mini marker" data-mark="note">マーカー</button></div>
+                <div class="note-tools">${MARKS.map(m => `<button class="swatch ${m.css}" data-mark="note" data-d="${m.d}" title="マーカー（${m.label}）"></button>`).join('')}</div>
                 <div class="editor">
                     <div class="backdrop">${paintMark(n.body)}
 </div>
@@ -791,13 +806,41 @@ function isTyping() {
 }
 let renderPending = false;
 let sidebarTimer = null;
+
+/* 打鍵中でも、入力欄に触らない部分は更新してよい。
+   ここを止めると、メモに #タグ を書いても左にも下にも出てこない */
 function scheduleSidebar() {
     clearTimeout(sidebarTimer);
-    sidebarTimer = setTimeout(() => { if (!renderPending) renderSidebar(); }, 300);
+    sidebarTimer = setTimeout(() => {
+        const a = document.activeElement;
+        if (a && document.getElementById('sidebar').contains(a)) return;   // 枠の名前を打っている最中
+        renderSidebar();
+        refreshTagline();
+    }, 250);
 }
-document.addEventListener('blur', () => {
+
+/* MEMOペインのタグ帯だけ差し替える。入力欄には触らない */
+function refreshTagline() {
+    const pane = document.querySelector('.pane-memo');
+    if (!pane || view.kind !== 'project') return;
+    const p = currentProject();
+    if (!p) return;
+    const tags = extractTags(p.scratch);
+    let el = pane.querySelector('.tagline');
+    if (!tags.length) { if (el) el.remove(); return; }
+    if (!el) {
+        el = document.createElement('div');
+        el.className = 'tagline';
+        pane.appendChild(el);
+    }
+    el.innerHTML = tags.map(g =>
+        `<span class="tag" style="background:${tagColor(g)}" data-tag="${esc(g)}">${esc(g)}</span> `).join('');
+}
+
+/* blur は伝わらないことがある。focusout は必ず上がってくる */
+document.addEventListener('focusout', () => {
     setTimeout(() => { if (renderPending && !isTyping()) render(); }, 0);
-}, true);
+});
 
 function render(force) {
     if (!force && isTyping()) { renderPending = true; scheduleSidebar(); return; }
@@ -841,6 +884,8 @@ document.addEventListener('click', e => {
     if (e.target.closest('#menu')) return;
     closeMenu();
     if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+    /* 打鍵中に見送った描き直しを、ここでも取り戻す（focusout を取りこぼしたとき用） */
+    if (renderPending && !isTyping()) render();
     const el = t => e.target.closest(t);
     let n;
 
@@ -945,7 +990,7 @@ document.addEventListener('click', e => {
         const ta = n.dataset.mark === 'scratch'
             ? document.querySelector('[data-scratch]')
             : document.querySelector('[data-notebody]');
-        if (ta) toggleMark(ta);
+        if (ta) toggleMark(ta, n.dataset.d);
         return;
     }
 
@@ -1059,7 +1104,7 @@ document.addEventListener('keydown', e => {
     /* ⌘B / Ctrl+B でマーカー */
     if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'b' && (d.scratch || d.notebody)) {
         e.preventDefault();
-        return toggleMark(e.target);
+        return toggleMark(e.target, MARKS[0].d);
     }
 
     if ((e.key === 'Enter' || e.key === 'Escape') && isImeEnter(e)) return;   // 変換中は横取りしない
