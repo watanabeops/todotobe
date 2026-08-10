@@ -162,7 +162,7 @@ async function startSync(push) {
 function stopSync() {
     if (fb) { fb.unsubs.forEach(u => { try { u(); } catch (e) {} }); }
     fb = null;
-    syncState = config.enabled ? 'off' : 'off';
+    syncState = 'off';
 }
 
 async function pushAll() {
@@ -240,7 +240,8 @@ function allTags() {
 }
 
 /* 枠は必ず SLOTS 個。中身は '#…' か空文字。
-   全部空なら既定値に戻す（初回と、事故で消えたときの復帰） */
+   空いている枠は既定値で1つずつ埋める（初回と、事故で消えたときの復帰）。
+   自分で付けた名前は上書きしない */
 function normalizeSlots(arr) {
     const out = [];
     for (let i = 0; i < SLOTS; i++) out.push(typeof (arr || [])[i] === 'string' ? (arr[i] || '') : '');
@@ -502,10 +503,10 @@ function tagCount(g) {
         + state.projects.filter(p => extractTags(p.scratch).includes(g)).length;
 }
 
-function sideItem(ico, label, cnt, target, active, extra) {
+function sideItem(ico, label, cnt, target, active) {
     return `<div class="side-item ${active ? 'active' : ''}" data-go="${target}">
         <span class="ico">${ico}</span><span class="nm">${esc(label)}</span>
-        ${extra || (cnt ? `<span class="cnt">${cnt}</span>` : '')}</div>`;
+        ${cnt ? `<span class="cnt">${cnt}</span>` : ''}</div>`;
 }
 
 function renderSidebar() {
@@ -601,13 +602,12 @@ function addRow(projectId, sectionId) {
 function renderProject(p) {
     const mine = live().filter(x => x.projectId === p.id).sort(byOrder);
     const loose = mine.filter(x => !x.sectionId);
-    const tags = extractTags(p.scratch);
 
     const memo = `<div class="pane-memo ${memoFolded ? 'folded' : ''}" style="height:${memoFolded ? 'auto' : memoH + '%'}">
         <div class="bar-top">
             <span class="ttl">MEMO</span>
             <span class="spacer"></span>
-            ${MARKS.map(m => `<button class="swatch ${m.css}" data-mark="scratch" data-d="${m.d}" title="マーカー（${m.label}）"></button>`).join('')}
+            ${MARKS.map(m => `<button class="swatch ${m.css}" data-mark="1" data-d="${m.d}" title="マーカー（${m.label}）"></button>`).join('')}
             <button class="mini" data-cut="${p.id}">メモ切りだし</button>
             <button class="mini" data-foldmemo="1">${memoFolded ? '開く' : 'たたむ'}</button>
         </div>
@@ -626,12 +626,15 @@ function renderProject(p) {
     sectionsOf(p.id).forEach(s => {
         const list = mine.filter(x => x.sectionId === s.id);
         const off = collapsed.has(s.id);
+        const editingThis = editing && editing.kind === 'section' && editing.id === s.id;
         body += `<div class="section">
             <div class="section-head ${off ? 'collapsed' : ''}">
                 <span class="caret" data-fold="${s.id}">▼</span>
-                <span class="nm" data-fold="${s.id}">${esc(s.name)}</span>
-                ${list.length ? `<span class="cnt">${list.length}</span>` : ''}
-                <span class="dots" data-smenu="${s.id}">⋯</span></div>
+                ${editingThis
+                    ? `<input class="task-edit" data-editsection="${s.id}" value="${esc(s.name)}">`
+                    : `<span class="nm" data-fold="${s.id}">${esc(s.name)}</span>
+                       ${list.length ? `<span class="cnt">${list.length}</span>` : ''}
+                       <span class="dots" data-smenu="${s.id}">⋯</span>`}</div>
             ${off ? '' : list.map(x => taskHTML(x)).join('') + addRow(p.id, s.id)}
         </div>`;
     });
@@ -674,12 +677,21 @@ function renderTag(tag) {
 
 /* --- 検索 --- */
 function hit(text, q) { return String(text || '').toLowerCase().includes(q); }
+/* 当たった箇所を全部光らせる。
+   照合は素の文字列でやり、切ったあとに逃がす。
+   逃がしてから探すと &amp; のような置き換えの途中で切れる */
 function mark(text, q) {
-    const s = esc(text);
-    if (!q) return s;
-    const i = s.toLowerCase().indexOf(q);
-    if (i < 0) return s;
-    return s.slice(0, i) + '<mark>' + s.slice(i, i + q.length) + '</mark>' + s.slice(i + q.length);
+    const raw = String(text == null ? '' : text);
+    if (!q) return esc(raw);
+    const low = raw.toLowerCase();
+    let out = '', i = 0;
+    for (;;) {
+        const k = low.indexOf(q, i);
+        if (k < 0) { out += esc(raw.slice(i)); break; }
+        out += esc(raw.slice(i, k)) + '<mark>' + esc(raw.slice(k, k + q.length)) + '</mark>';
+        i = k + q.length;
+    }
+    return out;
 }
 function renderSearch() {
     const q = searchQ.trim().toLowerCase();
@@ -694,7 +706,7 @@ function renderSearch() {
 
     if (ts.length) {
         h += `<div class="group-label">タスク ${ts.length}件</div>`;
-        h += ts.map(x => `<div class="task"><div class="check ${x.completedAt ? '' : ''}" data-done="${x.completedAt ? '' : x.id}"></div>
+        h += ts.map(x => `<div class="task"><div class="check" data-done="${x.completedAt ? '' : x.id}"></div>
             <div class="task-body"><div class="task-title">${mark(x.body, q)}</div>
             ${x.note ? `<div class="task-note">${mark(x.note, q)}</div>` : ''}
             <div class="task-meta">${esc(x.projectName)}${x.sectionName ? ' / ' + esc(x.sectionName) : ''}${x.completedAt ? '　·　完了' : ''}</div>
@@ -745,7 +757,7 @@ function renderMemo() {
         if (openNote === n.id) {
             return `<div class="note-card open">
                 <input class="title-input" data-notetitle="${n.id}" value="${esc(n.title)}">
-                <div class="note-tools">${MARKS.map(m => `<button class="swatch ${m.css}" data-mark="note" data-d="${m.d}" title="マーカー（${m.label}）"></button>`).join('')}</div>
+                <div class="note-tools">${MARKS.map(m => `<button class="swatch ${m.css}" data-mark="1" data-d="${m.d}" title="マーカー（${m.label}）"></button>`).join('')}</div>
                 <div class="editor">
                     <div class="backdrop">${paintMark(n.body)}
 </div>
@@ -854,7 +866,7 @@ function tagBarHTML() {
 function fieldFor() {
     const a = document.activeElement;
     if (a && (a.tagName === 'INPUT' || a.tagName === 'TEXTAREA') && a.type !== 'checkbox') return a;
-    return document.querySelector('.add-row input, [data-edittask], [data-editnote]')
+    return document.querySelector('.add-row input, [data-edittask], [data-editnote], [data-editsection]')
         || document.querySelector('[data-notebody]')
         || document.querySelector('[data-scratch]');
 }
@@ -1061,9 +1073,7 @@ document.addEventListener('click', e => {
         return;
     }
     if ((n = el('[data-mark]'))) {
-        const ta = n.dataset.mark === 'scratch'
-            ? document.querySelector('[data-scratch]')
-            : document.querySelector('[data-notebody]');
+        const ta = fieldFor();          // チップと同じく、いま書いている欄に効かせる
         if (ta) toggleMark(ta, n.dataset.d);
         return;
     }
@@ -1182,7 +1192,12 @@ document.addEventListener('keydown', e => {
     }
 
     if ((e.key === 'Enter' || e.key === 'Escape') && isImeEnter(e)) return;   // 変換中は横取りしない
-    if (d.edittask && e.key === 'Enter') {
+    if (d.editsection && e.key === 'Enter') {
+        e.preventDefault();
+        commitSectionName(d.editsection, e.target.value);
+    } else if (d.editsection && e.key === 'Escape') {
+        editing = null; render();
+    } else if (d.edittask && e.key === 'Enter') {
         e.preventDefault();
         const x = state.tasks.find(y => y.id === d.edittask);
         const v = e.target.value.trim();
@@ -1196,7 +1211,9 @@ document.addEventListener('keydown', e => {
 });
 document.addEventListener('blur', e => {
     const d = e.target.dataset || {};
-    if (d.edittask) {
+    if (d.editsection) {
+        commitSectionName(d.editsection, e.target.value);
+    } else if (d.edittask) {
         const x = state.tasks.find(y => y.id === d.edittask);
         const v = e.target.value.trim();
         if (x && v && v !== x.body) { x.body = v; put('tasks', x); }
@@ -1232,12 +1249,22 @@ function startRenameProject(p) {
         render();
     });
 }
+/* その場編集にする。他の名前（プロジェクト・タグ枠・タスク）と揃える */
 function renameSection(s) {
-    const name = prompt('セクション名', s.name);
-    if (name == null || !name.trim()) return;
-    s.name = name.trim();
-    put('sections', s);
-    state.tasks.filter(t => t.sectionId === s.id).forEach(t => { t.sectionName = s.name; put('tasks', t); });
+    editing = { kind: 'section', id: s.id };
+    render();
+    const inp = document.querySelector(`[data-editsection="${s.id}"]`);
+    if (inp) { inp.focus(); inp.select(); }
+}
+function commitSectionName(id, raw) {
+    const s = state.sections.find(x => x.id === id);
+    const name = String(raw || '').trim();
+    if (s && name && name !== s.name) {
+        s.name = name;
+        put('sections', s);
+        state.tasks.filter(t => t.sectionId === s.id).forEach(t => { t.sectionName = name; put('tasks', t); });
+    }
+    editing = null;
     render();
 }
 function killSection(s) {

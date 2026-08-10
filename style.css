@@ -4,7 +4,6 @@
     --accent: #dc4c3e;
     --text: #202020;
     --muted: #808080;
-    --faint: #a8a29c;
     --line: #ececec;
     --side-bg: #fcfaf8;
     --side-line: #ebe9e7;
@@ -14,7 +13,6 @@
     --mark-y: #ffe9a8;
     --mark-p: #ffd6e2;
     --mark-g: #cdf0d5;
-    --mark: #ffe9a8;
 }
 
 * { box-sizing: border-box; }
