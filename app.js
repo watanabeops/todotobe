@@ -45,7 +45,18 @@ let openNote = null;
 let editing = null;              // {kind:'task-body'|'task-note'|..., id}
 let memoH = 33;
 let memoFolded = false;
-const collapsed = new Set();
+/* 畳んだセクションは端末ごとに覚える。同期はしない（画面の都合であってデータではない） */
+const KEY_COLLAPSED = 'todotobe_collapsed';
+const collapsed = new Set((() => {
+    try { const a = JSON.parse(localStorage.getItem(KEY_COLLAPSED)); return Array.isArray(a) ? a : []; }
+    catch (e) { return []; }
+})());
+function saveCollapsed() {
+    /* 消えたセクションのIDを溜め込まない */
+    const alive = [...collapsed].filter(id => state.sections.some(s => s.id === id));
+    collapsed.clear(); alive.forEach(id => collapsed.add(id));
+    try { localStorage.setItem(KEY_COLLAPSED, JSON.stringify(alive)); } catch (e) {}
+}
 let searchQ = '';
 
 const uid = () => (crypto.randomUUID ? crypto.randomUUID() : 'x' + Date.now() + Math.round(Math.random() * 1e6));
@@ -583,7 +594,8 @@ function taskHTML(x, showSection) {
             <div class="task-title">${withTags(x.body)}</div>
             <textarea class="task-edit" rows="3" data-editnote="${x.id}">${esc(x.note)}</textarea></div></div>`;
     }
-    return `<div class="task">
+    return `<div class="task" data-task="${x.id}">
+        ${showSection ? '' : `<span class="grip" data-grip="${x.id}" title="つまんで並べ替え">⠿</span>`}
         <div class="check" data-done="${x.id}"></div>
         <div class="task-body">
             <div class="task-title" data-opentask="${x.id}">${withTags(x.body)}</div>
@@ -970,6 +982,8 @@ document.addEventListener('click', e => {
     const el = t => e.target.closest(t);
     let n;
 
+    if (el('[data-grip]')) return;      // 掴んだだけ。並べ替えは pointer 側で見る
+
     /* ⋯ メニューは行の内側にある。行のクリック（移動・折りたたみ）より先に見る */
     if ((n = el('[data-pmenu]'))) {
         e.stopPropagation();
@@ -1062,6 +1076,7 @@ document.addEventListener('click', e => {
     if ((n = el('[data-fold]'))) {
         const id = n.dataset.fold;
         collapsed.has(id) ? collapsed.delete(id) : collapsed.add(id);
+        saveCollapsed();
         return render();
     }
     if ((n = el('[data-renameproject]'))) return startRenameProject(projectOf(n.dataset.renameproject));
@@ -1281,6 +1296,51 @@ function killProject(p) {
             .concat(secs.map(s => ({ name: 'sections', obj: s })))
             .concat([{ name: 'projects', obj: p }]));
 }
+
+/* --- タスクの並べ替え ---
+   掴む場所（⠿）からだけ始める。行そのものを掴めるようにすると、
+   スマホで縦スクロールと取り合いになる。
+   入れ替えは同じ並びの中だけ。別のセクションへは移さない */
+document.addEventListener('pointerdown', e => {
+    const grip = e.target.closest('[data-grip]');
+    if (!grip) return;
+    const row = grip.closest('.task');
+    const list = row && row.parentElement;
+    if (!list) return;
+
+    e.preventDefault();
+    /* 掴んだ要素に捕まえさせる。失敗しても document 側で拾えるので止めない */
+    try { grip.setPointerCapture(e.pointerId); } catch (err) {}
+    row.classList.add('dragging');
+
+    const move = ev => {
+        const under = document.elementFromPoint(ev.clientX, ev.clientY);
+        const target = under && under.closest('.task');
+        if (!target || target === row || target.parentElement !== list) return;
+        const r = target.getBoundingClientRect();
+        const after = ev.clientY > r.top + r.height / 2;
+        list.insertBefore(row, after ? target.nextSibling : target);
+    };
+
+    const up = () => {
+        document.removeEventListener('pointermove', move);
+        document.removeEventListener('pointerup', up);
+        document.removeEventListener('pointercancel', up);
+        row.classList.remove('dragging');
+
+        /* 画面の並びを order に写す。変わった行だけ書く */
+        const ids = [...list.querySelectorAll(':scope > .task')].map(el => el.dataset.task);
+        ids.forEach((id, i) => {
+            const t = state.tasks.find(x => x.id === id);
+            if (t && t.order !== i + 1) { t.order = i + 1; put('tasks', t); }
+        });
+        render(true);
+    };
+
+    document.addEventListener('pointermove', move);
+    document.addEventListener('pointerup', up);
+    document.addEventListener('pointercancel', up);
+});
 
 /* --- 境目のドラッグ --- */
 document.addEventListener('pointerdown', e => {

@@ -235,6 +235,16 @@ h1 .rename { cursor: text; }
 .task-note { color: var(--muted); font-size: 16px; margin-top: 1px; white-space: pre-wrap; cursor: text; }
 .task-note.empty-note { color: #c8c4c0; }
 .task-meta { font-size: 13px; color: var(--muted); margin-top: 3px; }
+/* つまんで並べ替え。行ごと掴めるようにすると、スマホで縦スクロールと取り合いになる */
+.task .grip {
+    flex: 0 0 14px; width: 14px; margin-top: 2px;
+    color: #d5d0cb; cursor: grab; user-select: none;
+    text-align: center; line-height: 1.2;
+    visibility: hidden; touch-action: none;
+}
+.task:hover .grip { visibility: visible; }
+.task .grip:active { cursor: grabbing; }
+.task.dragging { opacity: .55; background: var(--hover); }
 .task .kill { color: #c8c4c0; cursor: pointer; padding: 0 4px; visibility: hidden; }
 .task:hover .kill { visibility: visible; }
 .task .kill:hover { color: var(--accent); }
@@ -387,6 +397,6 @@ mark { background: #ffe9a8; color: inherit; border-radius: 2px; }
     .pane-memo textarea, .pane-memo .backdrop, .pane-memo .tagline { padding-left: 18px; padding-right: 18px; }
     .pane-tasks { padding: 16px 18px 120px; }
     h1 { font-size: 22px; }
-    .side-item .dots, .section-head .dots, .task .kill { visibility: visible; }
+    .side-item .dots, .section-head .dots, .task .kill, .task .grip { visibility: visible; }
 }
 
